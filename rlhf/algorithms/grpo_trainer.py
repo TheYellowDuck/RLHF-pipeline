@@ -38,6 +38,11 @@ class GRPOTrainer:
         self.device = device
         self.metrics = metric_logger
         self.log = get_logger("rlhf.grpo")
+        pv = getattr(self.policy.config, "vocab_size", None)
+        rv = getattr(self.reward_model.config, "vocab_size", None)
+        if pv and rv and pv != rv:
+            raise ValueError(
+                f"reward-model vocab ({rv}) != policy vocab ({pv}); they must share a tokenizer.")
         self.opt = torch.optim.AdamW([p for p in self.policy.parameters() if p.requires_grad], lr=cfg.grpo.lr)
         self.vllm = None
         if cfg.grpo.get("use_vllm", False):

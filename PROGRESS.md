@@ -57,9 +57,9 @@ After each enhancement: smoke_test.py + pytest must stay green; commit a checkpo
 
 ## Polish (F) — live work (Kaggle run is the user's, done last & separately)
 - [x] F1  Checkpoint resume for PPO/GRPO (optimizer + global_step + KL-coef + reward-norm state)
-- [ ] F2  Tokenizer-mismatch guard in PPO/GRPO (RM vs policy vocab size)   <-- NEXT
-- [ ] F3  DPO length-normalization option (per-token-averaged logps; curbs length bias)
-- [ ] F4  Toy-reward PPO learning test (closed-form reward must increase / target-token prob rises)
+- [x] F2  Tokenizer-mismatch guard in PPO/GRPO (RM vs policy vocab size)
+- [x] F3  DPO length-normalization option (per-token-averaged logps; curbs length bias)
+- [ ] F4  Toy-reward PPO learning test (closed-form reward must increase / target-token prob rises)   <-- NEXT
 - [ ] F5  Re-run smoke + tests, update README/PROGRESS, commit
 
 ## Notes / decisions log

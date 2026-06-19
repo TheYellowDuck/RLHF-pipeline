@@ -129,7 +129,8 @@ def main():
     dpo_ref = load_causal_lm(MODEL, dtype=torch.float32)
     dpo_cfg = Config(dict(output_dir=f"{OUT}/dpo",
                           data=dict(max_length=48, max_prompt_length=24),
-                          dpo=dict(beta=0.1, loss_type="sigmoid", label_smoothing=0.0),
+                          dpo=dict(beta=0.1, loss_type="sigmoid", label_smoothing=0.0,
+                                   length_normalize=True),
                           train=dict(train_cfg)))
     DPOTrainer(dpo_model, dpo_ref, tok, dpo_cfg, DEVICE).train(pref_ds, eval_ds=pref_ds)
     check_finite(dpo_model, "DPO train")

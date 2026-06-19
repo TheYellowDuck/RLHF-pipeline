@@ -70,6 +70,13 @@ class PPOTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.ppo")
 
+        pv = getattr(self.policy.config, "vocab_size", None)
+        rv = getattr(self.reward_model.config, "vocab_size", None)
+        if pv and rv and pv != rv:
+            raise ValueError(
+                f"reward-model vocab ({rv}) != policy vocab ({pv}); the reward model and "
+                "policy must share a tokenizer (same base family).")
+
         # Frozen reference + reward model; disable dropout so old/new log-probs match.
         for m in (self.reward_model, self.ref_model):
             if m is not None:

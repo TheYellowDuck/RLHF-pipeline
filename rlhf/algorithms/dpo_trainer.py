@@ -69,6 +69,7 @@ class DPOTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.dpo")
         self.bf16 = bool(cfg.train.get("bf16", False))
+        self.length_normalize = bool(cfg.dpo.get("length_normalize", False))
         setup_gradient_checkpointing(self.model, cfg.train.get("gradient_checkpointing", False))
         self.global_step = 0
 
@@ -76,7 +77,10 @@ class DPOTrainer:
         logits = model(input_ids=input_ids, attention_mask=attention_mask).logits
         per_token = logprobs_from_logits(logits[:, :-1].float(), input_ids[:, 1:])
         mask = loss_mask[:, 1:].float()
-        return (per_token * mask).sum(dim=-1)
+        summed = (per_token * mask).sum(dim=-1)
+        if self.length_normalize:  # average over response tokens -> curbs length bias
+            return summed / mask.sum(dim=-1).clamp_min(1.0)
+        return summed
 
     def _both_sides_logps(self, model, batch):
         chosen = self._seq_logps(model, batch["chosen_input_ids"], batch["chosen_attention_mask"],

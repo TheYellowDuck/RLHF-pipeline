@@ -21,6 +21,7 @@ dpo:
   beta: 0.1                  # KL strength (implicit reward temperature)
   loss_type: sigmoid         # sigmoid (DPO) | ipo | hinge
   label_smoothing: 0.0
+  length_normalize: false    # average logps over response tokens (curbs length bias)
 
 train:
   epochs: 1
