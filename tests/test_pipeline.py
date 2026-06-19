@@ -16,6 +16,7 @@ from rlhf.algorithms.reward_trainer import bradley_terry_loss
 from rlhf.algorithms.dpo_trainer import dpo_loss
 from rlhf.models.reward_model import last_token_indices
 from rlhf.utils.running import RunningMoments
+from rlhf.eval import ClaudeJudge, judge_win_rate, parse_verdict
 from rlhf.utils import (
     Config,
     apply_overrides,
@@ -131,6 +132,40 @@ def test_running_moments_converges():
         rm.update(data[i:i + 100])
     assert abs(rm.mean - 7.0) < 0.3
     assert abs(rm.std - 3.0) < 0.3
+
+
+def test_parse_verdict():
+    assert parse_verdict("reasoning...\nVERDICT: A") == "A"
+    assert parse_verdict("VERDICT: B\n") == "B"
+    assert parse_verdict("I judge **VERDICT: tie**") == "tie"
+    assert parse_verdict("no verdict at all") is None
+    assert parse_verdict(None) is None
+
+
+class _StubJudge:
+    """Prefers whichever response contains the word 'good'."""
+    model = "stub"
+
+    def compare(self, conv, a, b):
+        if "good" in a and "good" not in b:
+            return "A"
+        if "good" in b and "good" not in a:
+            return "B"
+        return "tie"
+
+
+def test_judge_win_rate_position_controlled():
+    res = judge_win_rate(_StubJudge(), ["c1", "c2"], ["good x", "good"], ["bad", "meh"],
+                         swap=True, progress=False)
+    assert res["win_rate"] == 1.0 and res["policy_wins"] == 2 and res["n"] == 2
+
+
+def test_claude_judge_compare_with_fake_client():
+    block = type("Block", (), {"type": "text", "text": "because...\nVERDICT: B"})()
+    resp = type("Resp", (), {"content": [block], "stop_reason": "end_turn"})()
+    fake = type("Client", (), {"messages": type("M", (), {"create": lambda self, **kw: resp})()})()
+    judge = ClaudeJudge(client=fake)
+    assert judge.compare("conversation", "response a", "response b") == "B"
 
 
 def test_config_override_coercion():

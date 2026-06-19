@@ -43,10 +43,10 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
 
 ## Enhancements (live work)
 - [x] E0  Fix: reward model scored wrong token under left-padded prompts (PPO/GRPO)
-- [x] E1  PPO stability pack: running reward normalization + length/EOS penalties + richer KL/reward logging   <-- NEXT
-- [ ] E2  LLM-judge eval (Claude API via `anthropic` SDK, model claude-opus-4-8): independent win-rate,
+- [x] E1  PPO stability pack: running reward normalization + length/EOS penalties + richer KL/reward logging
+- [x] E2  LLM-judge eval (Claude API via `anthropic` SDK, model claude-opus-4-8): independent win-rate,
         position-bias control, graceful no-key fallback, mock-tested parsing
-- [ ] E3  Gradient-checkpointing flag wired through trainers (memory on Kaggle)
+- [ ] E3  Gradient-checkpointing flag wired through trainers (memory on Kaggle)   <-- NEXT
 - [ ] E4  accelerate multi-GPU (DDP) for supervised trainers (SFT/RM/DPO); verify single-process smoke
 - [ ] E5  vLLM rollout backend behind a flag with HF fallback (untestable locally; documented)
 - [ ] E6  Re-run smoke + unit tests, update README/PROGRESS, commit

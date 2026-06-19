@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "tensorboard"]
+judge = ["anthropic"]      # LLM-as-judge eval (scripts/evaluate.py judge)
+vllm = ["vllm"]            # optional fast rollouts for PPO/GRPO
 
 [tool.setuptools.packages.find]
 include = ["rlhf*"]

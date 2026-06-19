@@ -16,8 +16,6 @@ import argparse
 import os
 import sys
 
-import torch
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rlhf.algorithms import RewardTrainer
@@ -67,18 +65,40 @@ def score_policy(args, device, dtype):
         print(f"win_rate={100*win:.1f}%  base_mean={base_sc.mean().item():.4f}  policy_mean={sc.mean().item():.4f}")
 
 
+def judge_policy(args, device, dtype):
+    """Independent LLM-as-judge win-rate of a policy vs a baseline (RM-free)."""
+    from rlhf.eval import ClaudeJudge, judge_win_rate
+
+    tok = load_tokenizer(args.policy)
+    prompts = load_prompt_dataset(args.data, args.split, args.num)["prompt"]
+
+    def gen(path):
+        pol = ActorCriticPolicy.from_pretrained(path, dtype=dtype).to(device).eval()
+        return generate_responses(pol, tok, prompts, device, max_new_tokens=args.max_new_tokens,
+                                  do_sample=not args.greedy, temperature=args.temperature,
+                                  max_prompt_length=args.max_length // 2, batch_size=args.batch_size)
+
+    policy_resps, base_resps = gen(args.policy), gen(args.base)
+    judge = ClaudeJudge(model=args.judge_model, thinking=args.thinking)
+    result = judge_win_rate(judge, prompts, policy_resps, base_resps, swap=not args.no_swap)
+    log.info("LLM-judge result: %s", result)
+    print(result)
+
+
 def main():
     p = argparse.ArgumentParser(description="Evaluate RLHF artifacts")
     sub = p.add_subparsers(dest="mode", required=True)
 
-    common = argparse.ArgumentParser(add_help=False)
+    shared = argparse.ArgumentParser(add_help=False)
+    shared.add_argument("--data", default="Anthropic/hh-rlhf")
+    shared.add_argument("--split", default="test")
+    shared.add_argument("--max-length", type=int, default=512)
+    shared.add_argument("--batch-size", type=int, default=8)
+    shared.add_argument("--device", default="auto")
+    shared.add_argument("--dtype", default="auto")
+
+    common = argparse.ArgumentParser(add_help=False, parents=[shared])
     common.add_argument("--reward-model", required=True)
-    common.add_argument("--data", default="Anthropic/hh-rlhf")
-    common.add_argument("--split", default="test")
-    common.add_argument("--max-length", type=int, default=512)
-    common.add_argument("--batch-size", type=int, default=8)
-    common.add_argument("--device", default="auto")
-    common.add_argument("--dtype", default="auto")
 
     a = sub.add_parser("rm-accuracy", parents=[common])
     a.add_argument("--max-samples", type=int, default=1000)
@@ -91,13 +111,26 @@ def main():
     b.add_argument("--temperature", type=float, default=1.0)
     b.add_argument("--greedy", action="store_true")
 
+    j = sub.add_parser("judge", parents=[shared], help="independent Claude-as-judge win-rate")
+    j.add_argument("--policy", required=True)
+    j.add_argument("--base", required=True, help="baseline policy to compare against")
+    j.add_argument("--num", type=int, default=100)
+    j.add_argument("--max-new-tokens", type=int, default=64)
+    j.add_argument("--temperature", type=float, default=1.0)
+    j.add_argument("--greedy", action="store_true")
+    j.add_argument("--judge-model", default="claude-opus-4-8")
+    j.add_argument("--thinking", action="store_true", help="adaptive thinking (slower, stronger)")
+    j.add_argument("--no-swap", action="store_true", help="disable position-bias swap")
+
     args = p.parse_args()
     device = resolve_device(args.device)
     dtype = resolve_dtype(args.dtype, device)
     if args.mode == "rm-accuracy":
         rm_accuracy(args, device, dtype)
-    else:
+    elif args.mode == "score-policy":
         score_policy(args, device, dtype)
+    else:
+        judge_policy(args, device, dtype)
 
 
 if __name__ == "__main__":
