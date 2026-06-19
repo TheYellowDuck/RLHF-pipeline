@@ -90,6 +90,15 @@ class PPOTrainer:
             [p for p in self.policy.parameters() if p.requires_grad], lr=pc.lr
         )
         self.reward_norm = RunningMoments() if pc.get("normalize_rewards", False) else None
+        self.vllm = None
+        if pc.get("use_vllm", False):
+            from ..utils.vllm_gen import try_build_vllm
+
+            name = getattr(self.policy.config, "_name_or_path", None)
+            if name:
+                self.vllm = try_build_vllm(
+                    name, self.tokenizer, dtype="auto",
+                    max_model_len=int(cfg.data.max_prompt_length) + int(cfg.generation.max_new_tokens))
         self.global_step = 0
 
     # --- generation ---------------------------------------------------------
@@ -130,10 +139,22 @@ class PPOTrainer:
         prompt_ids = prompt_batch["input_ids"].to(self.device)
         prompt_attn = prompt_batch["attention_mask"].to(self.device)
 
-        seqs = self.policy.generate(prompt_ids, prompt_attn, self._gen_config())
-        responses = seqs[:, P:]
-        resp_mask = response_mask(responses, self.tokenizer.eos_token_id)
-        full_ids = seqs
+        full_ids = resp_mask = None
+        if self.vllm is not None:
+            try:
+                g = self.cfg.generation
+                self.vllm.sync_weights(self.policy.lm)
+                full_ids, resp_mask = self.vllm.generate_sequences(
+                    prompt_ids, prompt_attn, int(g.max_new_tokens),
+                    float(g.get("temperature", 1.0)), float(g.get("top_p", 1.0)),
+                    int(g.get("top_k", 0)))
+            except Exception as e:  # noqa: BLE001
+                self.log.warning("vLLM generation failed (%s); HF fallback.", e)
+                self.vllm = full_ids = resp_mask = None
+        if full_ids is None:
+            full_ids = self.policy.generate(prompt_ids, prompt_attn, self._gen_config())
+            resp_mask = response_mask(full_ids[:, P:], self.tokenizer.eos_token_id)
+        responses = full_ids[:, P:]
         full_attn = torch.cat([prompt_attn, resp_mask], dim=1)
 
         logp, values, _ = self._policy_forward(full_ids, full_attn, P)

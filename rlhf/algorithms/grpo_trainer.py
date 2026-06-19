@@ -37,6 +37,15 @@ class GRPOTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.grpo")
         self.opt = torch.optim.AdamW([p for p in self.policy.parameters() if p.requires_grad], lr=cfg.grpo.lr)
+        self.vllm = None
+        if cfg.grpo.get("use_vllm", False):
+            from ..utils.vllm_gen import try_build_vllm
+
+            name = getattr(self.policy.config, "_name_or_path", None)
+            if name:
+                self.vllm = try_build_vllm(
+                    name, self.tokenizer, dtype="auto",
+                    max_model_len=int(cfg.data.max_prompt_length) + int(cfg.generation.max_new_tokens))
         self.global_step = 0
 
     def _gen_config(self):
@@ -67,9 +76,20 @@ class GRPOTrainer:
         ids = prompt_batch["input_ids"].to(self.device).repeat_interleave(gc.group_size, dim=0)
         attn = prompt_batch["attention_mask"].to(self.device).repeat_interleave(gc.group_size, dim=0)
 
-        seqs = self.policy.generate(ids, attn, self._gen_config())
-        responses = seqs[:, P:]
-        resp_mask = response_mask(responses, self.tokenizer.eos_token_id)
+        seqs = resp_mask = None
+        if self.vllm is not None:
+            try:
+                g = self.cfg.generation
+                self.vllm.sync_weights(self.policy.lm)
+                seqs, resp_mask = self.vllm.generate_sequences(
+                    ids, attn, int(g.max_new_tokens), float(g.get("temperature", 1.0)),
+                    float(g.get("top_p", 1.0)), int(g.get("top_k", 0)))
+            except Exception as e:  # noqa: BLE001
+                self.log.warning("vLLM generation failed (%s); HF fallback.", e)
+                self.vllm = seqs = resp_mask = None
+        if seqs is None:
+            seqs = self.policy.generate(ids, attn, self._gen_config())
+            resp_mask = response_mask(seqs[:, P:], self.tokenizer.eos_token_id)
         full_attn = torch.cat([attn, resp_mask], dim=1)
 
         scores = self.reward_model(seqs, full_attn).float()                 # [N]

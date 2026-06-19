@@ -36,5 +36,6 @@ grpo:
   max_grad_norm: 1.0
   kl_coef: 0.04              # KL-to-reference regularizer (per-token, GRPO style)
   scale_rewards: true        # divide group-centered rewards by group std
+  use_vllm: false            # experimental: vLLM-backed rollouts (GPU only; HF fallback)
   log_every: 1
   save_every: 50

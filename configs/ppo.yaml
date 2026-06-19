@@ -49,5 +49,6 @@ ppo:
     target: 6.0              # target KL per sequence
     horizon: 10000
   score_clip: null           # optional clip on reward-model scores, e.g. 5.0
+  use_vllm: false            # experimental: vLLM-backed rollouts (GPU only; HF fallback)
   log_every: 1
   save_every: 50

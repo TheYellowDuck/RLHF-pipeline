@@ -48,8 +48,8 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
         position-bias control, graceful no-key fallback, mock-tested parsing
 - [x] E3  Gradient-checkpointing flag wired through trainers (memory on Kaggle)
 - [x] E4  accelerate multi-GPU (DDP) for supervised trainers (SFT/RM/DPO); verify single-process smoke
-- [ ] E5  vLLM rollout backend behind a flag with HF fallback (untestable locally; documented)   <-- NEXT
-- [ ] E6  Re-run smoke + unit tests, update README/PROGRESS, commit
+- [x] E5  vLLM rollout backend behind a flag with HF fallback (untestable locally; documented)
+- [x] E6  Re-run smoke + unit tests, update README/PROGRESS, commit
 
 After each enhancement: smoke_test.py + pytest must stay green; commit a checkpoint.
 
