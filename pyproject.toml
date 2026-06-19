@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rlhf-pipeline"
+version = "0.1.0"
+description = "From-scratch RLHF: reward model + PPO (plus DPO and GRPO)"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "torch>=2.2",
+    "transformers>=4.44",
+    "datasets>=2.20",
+    "accelerate>=0.33",
+    "peft>=0.12",
+    "numpy",
+    "tqdm",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "tensorboard"]
+
+[tool.setuptools.packages.find]
+include = ["rlhf*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

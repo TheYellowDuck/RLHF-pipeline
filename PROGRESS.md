@@ -33,11 +33,17 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
         + integration test PASSES on tiny-gpt2 (transformers v5, MPS box)
 - [x] M5  Reward-model trainer (BT loss + eval accuracy)  [written; smoke-tested in M9]
 - [x] M6  SFT trainer  [written; smoke-tested in M9]
-- [ ] M7  PPO trainer from scratch + script          <-- NEXT
-- [ ] M8  DPO trainer + GRPO trainer + scripts
-- [ ] M9  Eval + generation utilities + end-to-end CPU smoke test (must pass)
-- [ ] M10 Training scripts (CLI) for all stages + Kaggle notebook + README finalization
-- [ ] M11 Unit tests (logprobs, GAE, BT loss, RM forward, masking) green
+- [x] M7  PPO trainer from scratch (GAE, KL shaping, clip, value, entropy, adaptive KL)
+- [x] M8  DPO trainer + GRPO trainer
+- [x] M9  Eval + generation utilities + end-to-end CPU smoke test (PASSES all 5 stages)
+- [x] M10 CLI scripts (train_*/evaluate) + Kaggle notebook + README + pyproject
+- [x] M11 Unit tests green (11 passed); reward-model CLI verified on real HH-RLHF
+
+## STATUS: COMPLETE ✅
+All milestones done. `python scripts/smoke_test.py` + `pytest tests/` are green.
+Real training runs via scripts/ (local small models) or notebooks/kaggle_rlhf.ipynb (GPU).
+Future work if asked: multi-GPU/accelerate sharding, vLLM rollouts, RLAIF, length-penalty/
+reward-norm ablations, online DPO. Nothing pending — heartbeat may stop (see below).
 
 ## Notes / decisions log
 - 2026-06-19: durable cron flag did not persist to disk in this harness build;

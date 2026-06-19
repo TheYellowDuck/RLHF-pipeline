@@ -20,3 +20,6 @@ data/cache/
 # misc
 .DS_Store
 *.log
+.claude/
+smoke.err.log
+cli.err.log
