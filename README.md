@@ -130,6 +130,32 @@ python scripts/evaluate.py rm-accuracy --reward-model checkpoints/reward_model \
 # Did RLHF help? Win-rate of the PPO policy vs the SFT baseline, judged by the RM
 python scripts/evaluate.py score-policy --policy checkpoints/ppo \
     --reward-model checkpoints/reward_model --compare checkpoints/sft --num 200
+
+# Independent check: Claude-as-judge win-rate (RM-free; position-bias controlled).
+# `score-policy --compare` is judged by the *same* RM the policy optimized against,
+# so it's circular and blind to reward hacking — this gives an outside signal.
+pip install anthropic && export ANTHROPIC_API_KEY=...        # one-time
+python scripts/evaluate.py judge --policy checkpoints/ppo --base checkpoints/sft --num 100
+```
+
+---
+
+## Scaling & speed
+
+```bash
+# Activation checkpointing (less memory, more compute) — SFT/RM/DPO
+python scripts/train_sft.py -o train.gradient_checkpointing=true ...
+
+# Multi-GPU data parallelism (DDP) for the supervised trainers
+accelerate launch scripts/train_sft.py --accelerate -o model.name_or_path=...
+accelerate launch scripts/train_reward_model.py --accelerate ...
+
+# PPO stability knobs (curb reward hacking / length exploitation)
+python scripts/train_ppo.py -o ppo.normalize_rewards=true \
+    -o ppo.length_penalty=0.001 -o ppo.missing_eos_penalty=1.0 ...
+
+# Experimental: vLLM-backed rollouts (GPU only; auto-falls back to HF if unavailable)
+pip install vllm && python scripts/train_ppo.py -o ppo.use_vllm=true ...
 ```
 
 ---
@@ -165,8 +191,9 @@ this repo, runs SFT → RM → PPO, and scores the result.
 rlhf/
   data/         preference / prompt / SFT datasets + collators (correct padding sides)
   models/       reward model, actor-critic policy, value head, loaders (LoRA, v5-safe)
-  algorithms/   reward / sft / ppo / dpo / grpo trainers
-  utils/        config, metrics, generation, and the RL/tensor math (GAE, logprobs…)
+  algorithms/   reward / sft / ppo / dpo / grpo trainers (+ accelerate, grad-checkpoint)
+  eval/         Claude-as-judge win-rate (independent of the reward model)
+  utils/        config, metrics, generation, RL math (GAE, logprobs…), running stats, vLLM
   cli.py        shared argparse + logger plumbing
 scripts/        train_*.py, evaluate.py, smoke_test.py
 configs/        one YAML per stage
@@ -176,8 +203,12 @@ notebooks/      Kaggle GPU runner
 
 ## Limitations / honest scope
 
-- Reference is a single-machine, single-GPU implementation (plus gradient
-  accumulation + LoRA). No multi-GPU sharding, vLLM rollout, or PagedAttention.
-- Reward models on small backbones overfit fast — use eval accuracy as the guide.
+- Multi-GPU (DDP via `accelerate`) is wired for the **supervised** trainers
+  (SFT/RM/DPO) and verified single-process; true multi-GPU and the PPO/GRPO RL
+  loop remain single-GPU. The vLLM rollout backend is **experimental** — it was
+  written against a CUDA target but could not be executed in the dev environment
+  (Apple Silicon, no CUDA), so it ships flag-gated with automatic HF fallback.
+- Reward models on small backbones overfit fast — use eval accuracy as the guide,
+  and cross-check RLHF gains with the independent LLM judge (RM win-rate is circular).
 - This is an educational, faithful reproduction of the algorithms, not a
   throughput-optimized training stack.

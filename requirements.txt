@@ -13,3 +13,7 @@ tensorboard
 
 # Optional: experiment tracking. Uncomment to use --report_to wandb
 # wandb
+
+# Optional extras (install as needed):
+#   anthropic   # LLM-as-judge eval:  scripts/evaluate.py judge
+#   vllm        # fast PPO/GRPO rollouts (GPU only):  -o ppo.use_vllm=true

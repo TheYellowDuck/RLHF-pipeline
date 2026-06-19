@@ -53,6 +53,8 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
 
 After each enhancement: smoke_test.py + pytest must stay green; commit a checkpoint.
 
+## ENHANCEMENTS COMPLETE ✅ (E0-E6). 16 unit tests + 5-stage smoke + accelerate path green.
+
 ## Notes / decisions log
 - 2026-06-19: durable cron flag did not persist to disk in this harness build;
   heartbeat is in-memory (survives usage resets while Claude Code stays open).
