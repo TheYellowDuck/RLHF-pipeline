@@ -12,7 +12,18 @@ from torch.utils.data import DataLoader
 
 from ..data import PreferenceCollator
 from ..utils.common import get_logger
-from .common import autocast_ctx, build_optimizer, build_scheduler, move_to_device, save_tokenizer
+from .common import (
+    acc_backward,
+    acc_clip_grad_norm,
+    acc_is_main,
+    acc_prepare,
+    acc_unwrap,
+    autocast_ctx,
+    build_optimizer,
+    build_scheduler,
+    move_to_device,
+    save_tokenizer,
+)
 
 
 def bradley_terry_loss(chosen_rewards: torch.Tensor, rejected_rewards: torch.Tensor, margin: float = 0.0):
@@ -20,11 +31,12 @@ def bradley_terry_loss(chosen_rewards: torch.Tensor, rejected_rewards: torch.Ten
 
 
 class RewardTrainer:
-    def __init__(self, model, tokenizer, cfg, device, metric_logger=None):
-        self.model = model.to(device)
+    def __init__(self, model, tokenizer, cfg, device, metric_logger=None, accelerator=None):
+        self.acc = accelerator
+        self.device = accelerator.device if accelerator is not None else device
+        self.model = model.to(self.device)
         self.tokenizer = tokenizer
         self.cfg = cfg
-        self.device = device
         self.metrics = metric_logger
         self.log = get_logger("rlhf.reward")
         self.bf16 = bool(cfg.train.get("bf16", False))
@@ -50,8 +62,10 @@ class RewardTrainer:
         total_steps = steps_per_epoch * self.cfg.train.epochs
         opt = build_optimizer(self.model, self.cfg.train.lr, self.cfg.train.get("weight_decay", 0.0))
         sched = build_scheduler(opt, total_steps, self.cfg.train.get("warmup_ratio", 0.0))
-        self.log.info("RM training: %d optimizer steps (%d/epoch x %d epochs)",
-                      total_steps, steps_per_epoch, self.cfg.train.epochs)
+        self.model, opt, sched, loader = acc_prepare(self.acc, self.model, opt, sched, loader)
+        self.log.info("RM training: %d optimizer steps (%d/epoch x %d epochs)%s",
+                      total_steps, steps_per_epoch, self.cfg.train.epochs,
+                      " (accelerate)" if self.acc is not None else "")
 
         self.model.train()
         opt.zero_grad()
@@ -62,26 +76,28 @@ class RewardTrainer:
                 with autocast_ctx(self.device, self.bf16):
                     c, r = self._scores(batch)
                     loss = bradley_terry_loss(c, r) / grad_accum
-                loss.backward()
+                acc_backward(self.acc, loss)
                 micro += 1
                 if micro % grad_accum == 0:
-                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg.train.max_grad_norm)
+                    acc_clip_grad_norm(self.acc, self.model, self.cfg.train.max_grad_norm)
                     opt.step(); sched.step(); opt.zero_grad()
                     self.global_step += 1
-                    if self.global_step % self.cfg.train.get("log_every", 10) == 0:
+                    main = acc_is_main(self.acc)
+                    if main and self.global_step % self.cfg.train.get("log_every", 10) == 0:
                         acc = (c > r).float().mean().item()
                         m = {"loss": loss.item() * grad_accum, "accuracy": acc,
                              "reward_chosen": c.mean().item(), "reward_rejected": r.mean().item(),
                              "reward_margin": (c - r).mean().item(), "lr": sched.get_last_lr()[0]}
                         if self.metrics: self.metrics.log_metrics(m, self.global_step, prefix="rm")
                         else: self.log.info("step %d %s", self.global_step, m)
-                    if eval_ds is not None and self.global_step % self.cfg.train.get("eval_every", 200) == 0:
+                    if main and eval_ds is not None and self.global_step % self.cfg.train.get("eval_every", 200) == 0:
                         self._run_eval(eval_ds)
-                    if self.global_step % self.cfg.train.get("save_every", 500) == 0:
+                    if main and self.global_step % self.cfg.train.get("save_every", 500) == 0:
                         self.save(self.cfg.output_dir)
-        if eval_ds is not None:
-            self._run_eval(eval_ds)
-        self.save(self.cfg.output_dir)
+        if acc_is_main(self.acc):
+            if eval_ds is not None:
+                self._run_eval(eval_ds)
+            self.save(self.cfg.output_dir)
         return self.model
 
     @torch.no_grad()
@@ -109,6 +125,6 @@ class RewardTrainer:
         else: self.log.info("eval %s", m)
 
     def save(self, path: str):
-        self.model.save_pretrained(path)
+        acc_unwrap(self.acc, self.model).save_pretrained(path)
         save_tokenizer(self.tokenizer, path)
         self.log.info("saved reward model -> %s", path)

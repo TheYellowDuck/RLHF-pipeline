@@ -71,6 +71,35 @@ def move_to_device(batch: dict, device: torch.device) -> dict:
     }
 
 
+# --- optional 🤗 accelerate integration (multi-GPU / DDP) -------------------
+# These wrappers no-op when ``acc`` is None, so the default single-device path
+# is byte-for-byte the original code; an injected Accelerator enables DDP.
+
+def acc_prepare(acc, *objects):
+    return acc.prepare(*objects) if acc is not None else objects
+
+
+def acc_backward(acc, loss):
+    if acc is not None:
+        acc.backward(loss)
+    else:
+        loss.backward()
+
+
+def acc_clip_grad_norm(acc, model, max_norm: float):
+    if acc is not None:
+        return acc.clip_grad_norm_(model.parameters(), max_norm)
+    return torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+
+
+def acc_is_main(acc) -> bool:
+    return acc.is_main_process if acc is not None else True
+
+
+def acc_unwrap(acc, model):
+    return acc.unwrap_model(model) if acc is not None else model
+
+
 def save_tokenizer(tokenizer, path: str):
     try:
         tokenizer.save_pretrained(path)

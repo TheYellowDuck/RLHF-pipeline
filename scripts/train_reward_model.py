@@ -9,8 +9,6 @@ from __future__ import annotations
 import os
 import sys
 
-import torch
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rlhf.algorithms import RewardTrainer
@@ -21,9 +19,16 @@ from rlhf.utils import resolve_dtype
 
 
 def main():
-    args = base_parser("Train a reward model", "configs/reward_model.yaml").parse_args()
+    parser = base_parser("Train a reward model", "configs/reward_model.yaml")
+    parser.add_argument("--accelerate", action="store_true", help="enable accelerate (multi-GPU/DDP)")
+    args = parser.parse_args()
     cfg, device = init(args)
     dtype = resolve_dtype(cfg.model.get("dtype", "auto"), device)
+    acc = None
+    if args.accelerate:
+        from accelerate import Accelerator
+
+        acc = Accelerator()
 
     tok = load_tokenizer(cfg.model.name_or_path)
     rm = RewardModel.from_backbone(
@@ -36,9 +41,11 @@ def main():
     if cfg.data.get("eval_split"):
         eval_ds = load_preference_dataset(cfg.data.name, cfg.data.eval_split, cfg.data.get("max_eval_samples"))
 
-    logger = make_logger(cfg, args, run_name="reward_model")
-    RewardTrainer(rm, tok, cfg, device, metric_logger=logger).train(train_ds, eval_ds)
-    logger.close()
+    is_main = acc is None or acc.is_main_process
+    logger = make_logger(cfg, args, run_name="reward_model") if is_main else None
+    RewardTrainer(rm, tok, cfg, device, metric_logger=logger, accelerator=acc).train(train_ds, eval_ds)
+    if logger:
+        logger.close()
 
 
 if __name__ == "__main__":

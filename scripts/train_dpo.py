@@ -18,10 +18,17 @@ from rlhf.utils import resolve_dtype
 
 
 def main():
-    args = base_parser("Direct Preference Optimization", "configs/dpo.yaml").parse_args()
+    parser = base_parser("Direct Preference Optimization", "configs/dpo.yaml")
+    parser.add_argument("--accelerate", action="store_true", help="enable accelerate (multi-GPU/DDP)")
+    args = parser.parse_args()
     cfg, device = init(args)
     dtype = resolve_dtype(cfg.model.get("dtype", "auto"), device)
     use_lora = cfg.model.get("use_lora", False)
+    acc = None
+    if args.accelerate:
+        from accelerate import Accelerator
+
+        acc = Accelerator()
 
     tok = load_tokenizer(cfg.model.name_or_path)
     model = load_causal_lm(cfg.model.name_or_path, dtype=dtype)
@@ -34,9 +41,11 @@ def main():
     if cfg.data.get("eval_split"):
         eval_ds = load_preference_dataset(cfg.data.name, cfg.data.eval_split, cfg.data.get("max_eval_samples"))
 
-    logger = make_logger(cfg, args, run_name="dpo")
-    DPOTrainer(model, ref, tok, cfg, device, metric_logger=logger).train(train_ds, eval_ds)
-    logger.close()
+    is_main = acc is None or acc.is_main_process
+    logger = make_logger(cfg, args, run_name="dpo") if is_main else None
+    DPOTrainer(model, ref, tok, cfg, device, metric_logger=logger, accelerator=acc).train(train_ds, eval_ds)
+    if logger:
+        logger.close()
 
 
 if __name__ == "__main__":

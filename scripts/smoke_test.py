@@ -123,6 +123,17 @@ def main():
     GRPOTrainer(grpo_policy, grpo_rm, tok, grpo_cfg, DEVICE, ref_model=grpo_ref).train(prompt_ds)
     check_finite(grpo_policy, "GRPO train")
 
+    # ---- bonus: accelerate path (single-process CPU) ---------------------
+    banner("bonus: accelerate path (single-process)")
+    from accelerate import Accelerator
+
+    acc = Accelerator(cpu=True)
+    acc_model = load_causal_lm(MODEL, dtype=torch.float32)
+    acc_cfg = Config(dict(output_dir=f"{OUT}/acc_sft",
+                          data=dict(max_length=48, mask_prompt=True), train=dict(train_cfg)))
+    SFTTrainer(acc_model, tok, acc_cfg, acc.device, accelerator=acc).train(sft_ds)
+    print("  accelerate single-process SFT OK")
+
     banner("ALL STAGES PASSED ✅")
 
 
