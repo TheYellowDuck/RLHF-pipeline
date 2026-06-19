@@ -49,6 +49,24 @@ def check_finite(model, where):
             raise AssertionError(f"non-finite parameter {n} after {where}")
 
 
+def learning_check(tok):
+    """Prove the reward model *optimizes*, not just runs: it must learn a
+    last-token-separable signal (chosen ends ' good', rejected ends ' bad')."""
+    banner("learning check: RM separates a learnable signal")
+    prompt = "\n\nHuman: Which answer is better?\n\nAssistant:"
+    ds = preference_dataset_from_pairs([(prompt, " good", " bad")] * 16)
+    rm = RewardModel.from_backbone(MODEL, dtype=torch.float32)
+    cfg = Config(dict(output_dir=f"{OUT}/rm_learn", data=dict(max_length=32),
+                      train=dict(epochs=15, batch_size=8, grad_accum=1, lr=5e-3, weight_decay=0.0,
+                                 warmup_ratio=0.0, max_grad_norm=1.0, bf16=False,
+                                 log_every=1000, eval_every=10000, save_every=10000)))
+    trainer = RewardTrainer(rm, tok, cfg, DEVICE)
+    trainer.train(ds)
+    acc = trainer.evaluate(ds)["eval_accuracy"]
+    assert acc > 0.9, f"reward model failed to learn a separable signal (acc={acc:.2f})"
+    print(f"  RM learned: chosen>rejected accuracy {acc:.2f}")
+
+
 def main():
     set_seed(0)
     prompts, pref, sft = synthetic()
@@ -122,6 +140,8 @@ def main():
                   scale_rewards=True, log_every=1, save_every=1000)))
     GRPOTrainer(grpo_policy, grpo_rm, tok, grpo_cfg, DEVICE, ref_model=grpo_ref).train(prompt_ds)
     check_finite(grpo_policy, "GRPO train")
+
+    learning_check(tok)
 
     # ---- bonus: accelerate path (single-process CPU) ---------------------
     banner("bonus: accelerate path (single-process)")

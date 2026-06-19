@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rlhf.algorithms.reward_trainer import bradley_terry_loss
 from rlhf.algorithms.dpo_trainer import dpo_loss
+from rlhf.algorithms.ppo_trainer import AdaptiveKLController
 from rlhf.models.reward_model import last_token_indices
 from rlhf.utils.running import RunningMoments
 from rlhf.eval import ClaudeJudge, judge_win_rate, parse_verdict
@@ -122,6 +123,16 @@ def test_last_token_indices_left_and_right_padding():
     # batch with differing real lengths
     idx = last_token_indices(torch.tensor([[0, 1, 1, 0, 0], [0, 0, 0, 1, 1]]))
     assert idx.tolist() == [2, 4]
+
+
+def test_adaptive_kl_controller_direction():
+    # KL above target -> increase the penalty coefficient; below target -> decrease.
+    up = AdaptiveKLController(init_coef=0.2, target=6.0, horizon=100)
+    up.update(current_kl=12.0, n_steps=10)
+    assert up.value > 0.2
+    down = AdaptiveKLController(init_coef=0.2, target=6.0, horizon=100)
+    down.update(current_kl=1.0, n_steps=10)
+    assert down.value < 0.2
 
 
 def test_running_moments_converges():
