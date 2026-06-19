@@ -69,7 +69,7 @@ class VLLMGenerator:
         appended right-padded to a common width G. The response mask comes from
         the exact generated lengths (EOS appended for naturally-finished rows).
         """
-        device, P = prompt_ids.device, prompt_ids.size(1)
+        device = prompt_ids.device
         eos_id, pad_id = self.tokenizer.eos_token_id, self.tokenizer.pad_token_id
         token_id_lists = [
             prompt_ids[i][prompt_attn[i].bool()].tolist() for i in range(prompt_ids.size(0))

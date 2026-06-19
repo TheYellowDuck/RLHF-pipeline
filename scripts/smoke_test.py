@@ -8,7 +8,6 @@ save/load, and that all losses are finite — NOT that anything actually learns.
 
 from __future__ import annotations
 
-import math
 import os
 import sys
 
