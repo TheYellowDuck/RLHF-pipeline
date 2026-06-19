@@ -26,16 +26,17 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
 
 ## Milestones
 - [x] M0  Heartbeat cron + PROGRESS.md + git repo + venv/deps install
-- [ ] M1  Scaffold: configs, requirements, README, .gitignore
-- [ ] M2  Utils: config loader, logging/metrics, tensor/RL ops, generation helpers
-- [ ] M3  Data layer: preference pairs, prompt-only, SFT datasets + collators
-- [ ] M4  Models: reward model (scalar head), actor-critic policy (value head), LoRA
-- [ ] M5  Reward-model trainer (BT loss + eval accuracy) + script
-- [ ] M6  SFT trainer + script
-- [ ] M7  PPO trainer from scratch + script
+- [x] M1  Scaffold: configs, requirements, README(skel), .gitignore
+- [x] M2  Utils: config loader, logging/metrics, tensor/RL ops
+- [x] M3  Data layer: preference pairs, prompt-only, SFT datasets + collators
+- [x] M4  Models: reward model (scalar head), actor-critic policy (value head), LoRA
+        + integration test PASSES on tiny-gpt2 (transformers v5, MPS box)
+- [x] M5  Reward-model trainer (BT loss + eval accuracy)  [written; smoke-tested in M9]
+- [x] M6  SFT trainer  [written; smoke-tested in M9]
+- [ ] M7  PPO trainer from scratch + script          <-- NEXT
 - [ ] M8  DPO trainer + GRPO trainer + scripts
 - [ ] M9  Eval + generation utilities + end-to-end CPU smoke test (must pass)
-- [ ] M10 Kaggle notebook + README finalization
+- [ ] M10 Training scripts (CLI) for all stages + Kaggle notebook + README finalization
 - [ ] M11 Unit tests (logprobs, GAE, BT loss, RM forward, masking) green
 
 ## Notes / decisions log
