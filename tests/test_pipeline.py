@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rlhf.algorithms.reward_trainer import bradley_terry_loss
 from rlhf.algorithms.dpo_trainer import dpo_loss
+from rlhf.models.reward_model import last_token_indices
 from rlhf.utils import (
     Config,
     apply_overrides,
@@ -109,6 +110,16 @@ def test_response_mask_stops_at_first_eos():
     assert m[0].tolist() == [1, 1, 1, 0, 0]
     # row 1: no eos -> all ones
     assert m[1].tolist() == [1, 1, 1, 1, 1]
+
+
+def test_last_token_indices_left_and_right_padding():
+    # right-pad only: last real token is at sum-1
+    assert last_token_indices(torch.tensor([[1, 1, 1, 0]]))[0].item() == 2
+    # left-pad prompt + right-pad response (the PPO/GRPO case): last real == idx 4
+    assert last_token_indices(torch.tensor([[0, 0, 1, 1, 1, 0]]))[0].item() == 4
+    # batch with differing real lengths
+    idx = last_token_indices(torch.tensor([[0, 1, 1, 0, 0], [0, 0, 0, 1, 1]]))
+    assert idx.tolist() == [2, 4]
 
 
 def test_config_override_coercion():

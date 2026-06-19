@@ -16,8 +16,15 @@ _HEAD_NAME = "value_head.pt"
 
 
 def last_token_indices(attention_mask: torch.Tensor) -> torch.Tensor:
-    """Index of the last non-pad token per row (right-padded). [B] long."""
-    return attention_mask.sum(dim=1).clamp_min(1).long() - 1
+    """Index of the last non-pad token per row, robust to LEFT or RIGHT padding.
+
+    PPO/GRPO score sequences shaped ``[left-padded prompt][response right-pad]``,
+    so the real tokens are not a prefix and ``sum-1`` would land inside the
+    prompt. Find the last position where attention_mask == 1 instead.
+    """
+    T = attention_mask.shape[1]
+    last_from_right = torch.flip(attention_mask, dims=[1]).float().argmax(dim=1)
+    return (T - 1 - last_from_right).long()
 
 
 class RewardModel(nn.Module):
