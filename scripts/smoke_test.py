@@ -115,6 +115,14 @@ def main():
     PPOTrainer(policy, reward_model, tok, ppo_cfg, DEVICE, ref_model=ref).train(prompt_ds)
     check_finite(policy, "PPO train")
 
+    # resume round-trip: reload policy + restore optimizer/step/KL state
+    resumed = ActorCriticPolicy.from_pretrained(f"{OUT}/ppo", dtype=torch.float32)
+    rt = PPOTrainer(resumed, RewardModel.from_pretrained(f"{OUT}/rm", dtype=torch.float32),
+                    tok, ppo_cfg, DEVICE, ref_model=load_causal_lm(MODEL, dtype=torch.float32))
+    rt.load_trainer_state(f"{OUT}/ppo")
+    assert rt.global_step == 2, f"PPO resume failed (step={rt.global_step})"
+    print(f"  PPO resume OK (global_step restored = {rt.global_step})")
+
     # ---- 4. DPO ----------------------------------------------------------
     banner("4/5 DPO")
     dpo_model = load_causal_lm(MODEL, dtype=torch.float32)

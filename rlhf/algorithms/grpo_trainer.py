@@ -9,6 +9,8 @@ is the clipped PPO surrogate with an explicit per-token KL-to-reference penalty
 
 from __future__ import annotations
 
+import os
+
 import torch
 from torch.utils.data import DataLoader
 from transformers import GenerationConfig
@@ -144,9 +146,10 @@ class GRPOTrainer:
         loader = DataLoader(prompt_ds, batch_size=gc.prompts_per_step, shuffle=True,
                             collate_fn=coll, drop_last=True)
         n_iters = max(1, gc.total_episodes // (gc.prompts_per_step * gc.group_size))
-        self.log.info("GRPO: %d iters x %d prompts x %d samples", n_iters, gc.prompts_per_step, gc.group_size)
+        self.log.info("GRPO: %d iters x %d prompts x %d samples (from step %d)",
+                      n_iters, gc.prompts_per_step, gc.group_size, self.global_step)
 
-        it = 0
+        it = self.global_step  # resume-aware
         while it < n_iters:
             for prompt_batch in loader:
                 if it >= n_iters:
@@ -168,4 +171,16 @@ class GRPOTrainer:
 
     def save(self, path):
         self.policy.save_pretrained(path); save_tokenizer(self.tokenizer, path)
+        torch.save({"optimizer": self.opt.state_dict(), "global_step": self.global_step},
+                   os.path.join(path, "trainer_state.pt"))
         self.log.info("saved GRPO policy -> %s", path)
+
+    def load_trainer_state(self, path):
+        sp = os.path.join(path, "trainer_state.pt")
+        if not os.path.exists(sp):
+            self.log.warning("no trainer_state.pt in %s; fresh optimizer", path)
+            return
+        st = torch.load(sp, map_location=self.device)
+        self.opt.load_state_dict(st["optimizer"])
+        self.global_step = st.get("global_step", 0)
+        self.log.info("resumed GRPO from step %d", self.global_step)

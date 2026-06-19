@@ -20,14 +20,19 @@ from rlhf.utils import resolve_dtype
 
 
 def main():
-    args = base_parser("GRPO RL fine-tuning", "configs/grpo.yaml").parse_args()
+    parser = base_parser("GRPO RL fine-tuning", "configs/grpo.yaml")
+    parser.add_argument("--resume", action="store_true", help="resume from output_dir checkpoint")
+    args = parser.parse_args()
     cfg, device = init(args)
     dtype = resolve_dtype(cfg.policy.get("dtype", "auto"), device)
     use_lora = cfg.policy.get("use_lora", False)
 
     tok = load_tokenizer(cfg.policy.name_or_path)
-    policy = ActorCriticPolicy.from_pretrained_lm(
-        cfg.policy.name_or_path, dtype=dtype, use_lora=use_lora, lora_cfg=cfg.policy.get("lora", {}))
+    if args.resume:
+        policy = ActorCriticPolicy.from_pretrained(cfg.output_dir, dtype=dtype)
+    else:
+        policy = ActorCriticPolicy.from_pretrained_lm(
+            cfg.policy.name_or_path, dtype=dtype, use_lora=use_lora, lora_cfg=cfg.policy.get("lora", {}))
     reward_model = RewardModel.from_pretrained(
         cfg.reward_model.name_or_path,
         dtype=resolve_dtype(cfg.reward_model.get("dtype", "auto"), device))
@@ -36,7 +41,10 @@ def main():
     prompt_ds = load_prompt_dataset(cfg.data.name, cfg.data.train_split, cfg.data.get("max_samples"))
 
     logger = make_logger(cfg, args, run_name="grpo")
-    GRPOTrainer(policy, reward_model, tok, cfg, device, ref_model=ref, metric_logger=logger).train(prompt_ds)
+    trainer = GRPOTrainer(policy, reward_model, tok, cfg, device, ref_model=ref, metric_logger=logger)
+    if args.resume:
+        trainer.load_trainer_state(cfg.output_dir)
+    trainer.train(prompt_ds)
     logger.close()
 
 

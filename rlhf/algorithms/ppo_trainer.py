@@ -17,6 +17,8 @@ Token alignment (P = prompt length, T = P + G full length):
 
 from __future__ import annotations
 
+import os
+
 import torch
 from torch.utils.data import DataLoader
 from transformers import GenerationConfig
@@ -258,9 +260,10 @@ class PPOTrainer:
         loader = DataLoader(prompt_ds, batch_size=pc.rollout_batch_size, shuffle=True,
                             collate_fn=coll, drop_last=True)
         n_iters = max(1, pc.total_episodes // pc.rollout_batch_size)
-        self.log.info("PPO: %d iterations x %d prompts/iter", n_iters, pc.rollout_batch_size)
+        self.log.info("PPO: %d iterations x %d prompts/iter (from step %d)",
+                      n_iters, pc.rollout_batch_size, self.global_step)
 
-        it = 0
+        it = self.global_step  # resume-aware (1 iteration == 1 global step)
         while it < n_iters:
             for prompt_batch in loader:
                 if it >= n_iters:
@@ -300,4 +303,26 @@ class PPOTrainer:
     def save(self, path):
         self.policy.save_pretrained(path)
         save_tokenizer(self.tokenizer, path)
+        state = {"optimizer": self.opt.state_dict(), "global_step": self.global_step,
+                 "kl_coef": self.kl_ctl.value}
+        if self.reward_norm is not None:
+            state["reward_norm"] = {"mean": self.reward_norm.mean, "var": self.reward_norm.var,
+                                    "count": self.reward_norm.count}
+        torch.save(state, os.path.join(path, "trainer_state.pt"))
         self.log.info("saved PPO policy -> %s", path)
+
+    def load_trainer_state(self, path):
+        """Restore optimizer + step + KL-coef (+ reward-norm) to resume a run."""
+        sp = os.path.join(path, "trainer_state.pt")
+        if not os.path.exists(sp):
+            self.log.warning("no trainer_state.pt in %s; fresh optimizer", path)
+            return
+        st = torch.load(sp, map_location=self.device)
+        self.opt.load_state_dict(st["optimizer"])
+        self.global_step = st.get("global_step", 0)
+        self.kl_ctl.value = st.get("kl_coef", self.kl_ctl.value)
+        if self.reward_norm is not None and "reward_norm" in st:
+            rn = st["reward_norm"]
+            self.reward_norm.mean, self.reward_norm.var, self.reward_norm.count = (
+                rn["mean"], rn["var"], rn["count"])
+        self.log.info("resumed PPO from step %d (kl_coef=%.4f)", self.global_step, self.kl_ctl.value)

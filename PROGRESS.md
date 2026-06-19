@@ -53,7 +53,14 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
 
 After each enhancement: smoke_test.py + pytest must stay green; commit a checkpoint.
 
-## ENHANCEMENTS COMPLETE ✅ (E0-E6). 16 unit tests + 5-stage smoke + accelerate path green.
+## ENHANCEMENTS COMPLETE ✅ (E0-E6). 17 unit tests + 5-stage smoke + accelerate + learning checks green.
+
+## Polish (F) — live work (Kaggle run is the user's, done last & separately)
+- [x] F1  Checkpoint resume for PPO/GRPO (optimizer + global_step + KL-coef + reward-norm state)
+- [ ] F2  Tokenizer-mismatch guard in PPO/GRPO (RM vs policy vocab size)   <-- NEXT
+- [ ] F3  DPO length-normalization option (per-token-averaged logps; curbs length bias)
+- [ ] F4  Toy-reward PPO learning test (closed-form reward must increase / target-token prob rises)
+- [ ] F5  Re-run smoke + tests, update README/PROGRESS, commit
 
 ## Notes / decisions log
 - 2026-06-19: durable cron flag did not persist to disk in this harness build;
