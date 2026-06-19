@@ -67,12 +67,14 @@ pip install -r requirements.txt
 ## 30-second sanity check
 
 Runs the whole pipeline — RM → SFT → PPO → DPO → GRPO — on a tiny random GPT-2
-with synthetic data, on CPU, in a few seconds. Verifies tensor alignment,
-masking, checkpoint save/load and that all losses are finite:
+with synthetic data, on CPU, in a few seconds. Verifies tensor alignment, masking,
+checkpoint save/load + resume, the accelerate path, and that things actually
+**optimize** (the RM learns a separable signal to 1.0 accuracy; a PPO step
+provably raises the log-prob of positive-advantage tokens) — not just run:
 
 ```bash
 python scripts/smoke_test.py
-python -m pytest tests/ -q          # 11 fast unit tests for the RL/RM math
+python -m pytest tests/ -q          # 17 fast unit tests for the RL/RM math
 ```
 
 ---
@@ -153,6 +155,12 @@ accelerate launch scripts/train_reward_model.py --accelerate ...
 # PPO stability knobs (curb reward hacking / length exploitation)
 python scripts/train_ppo.py -o ppo.normalize_rewards=true \
     -o ppo.length_penalty=0.001 -o ppo.missing_eos_penalty=1.0 ...
+
+# Resume an interrupted PPO/GRPO run (restores optimizer + step + KL state)
+python scripts/train_ppo.py --resume -o ppo.total_episodes=20000 ...
+
+# Length-normalized DPO (averages logps over response tokens; curbs length bias)
+python scripts/train_dpo.py -o dpo.length_normalize=true ...
 
 # Experimental: vLLM-backed rollouts (GPU only; auto-falls back to HF if unavailable)
 pip install vllm && python scripts/train_ppo.py -o ppo.use_vllm=true ...
