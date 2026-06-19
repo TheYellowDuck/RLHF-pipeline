@@ -1,0 +1,40 @@
+# Group Relative Policy Optimization (critic-free; DeepSeek-style)
+seed: 42
+output_dir: checkpoints/grpo
+device: auto
+
+policy:
+  name_or_path: checkpoints/sft
+  dtype: auto
+  use_lora: false
+  lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
+
+reward_model:
+  name_or_path: checkpoints/reward_model
+  dtype: auto
+
+data:
+  name: Anthropic/hh-rlhf
+  train_split: train
+  max_prompt_length: 256
+  max_samples: null
+
+generation:
+  max_new_tokens: 64
+  temperature: 1.0
+  top_k: 0.0
+  top_p: 1.0
+
+grpo:
+  total_episodes: 10000
+  prompts_per_step: 16       # unique prompts per update
+  group_size: 8              # samples per prompt (the "group" G)
+  mini_batch_size: 8
+  grpo_epochs: 1
+  cliprange: 0.2
+  lr: 1.0e-6
+  max_grad_norm: 1.0
+  kl_coef: 0.04              # KL-to-reference regularizer (per-token, GRPO style)
+  scale_rewards: true        # divide group-centered rewards by group std
+  log_every: 1
+  save_every: 50

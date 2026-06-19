@@ -1,0 +1,31 @@
+# Reward model training (Bradley-Terry preference loss)
+seed: 42
+output_dir: checkpoints/reward_model
+device: auto                 # auto|cpu|cuda|mps
+
+model:
+  name_or_path: gpt2
+  dtype: auto                # auto|float32|bfloat16|float16
+  use_lora: false
+  lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
+
+data:
+  name: Anthropic/hh-rlhf    # preference dataset (chosen/rejected)
+  train_split: train
+  eval_split: test
+  max_samples: null          # cap train examples (null = all)
+  max_eval_samples: 1000
+  max_length: 512
+
+train:
+  epochs: 1
+  batch_size: 8
+  grad_accum: 1
+  lr: 1.0e-5
+  weight_decay: 0.0
+  warmup_ratio: 0.03
+  max_grad_norm: 1.0
+  bf16: true
+  log_every: 10
+  eval_every: 200
+  save_every: 500

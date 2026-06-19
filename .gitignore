@@ -1,0 +1,22 @@
+# venv / python
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# data / model artifacts
+checkpoints/
+outputs/
+runs/
+wandb/
+*.pt
+*.bin
+*.safetensors
+data/cache/
+.cache/
+
+# misc
+.DS_Store
+*.log

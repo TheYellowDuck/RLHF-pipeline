@@ -1,0 +1,50 @@
+# PPO RL fine-tuning against a trained reward model (from scratch)
+seed: 42
+output_dir: checkpoints/ppo
+device: auto
+
+policy:
+  name_or_path: checkpoints/sft   # SFT model (or gpt2 to skip SFT)
+  dtype: auto
+  use_lora: false
+  lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
+
+reward_model:
+  name_or_path: checkpoints/reward_model
+  dtype: auto
+
+data:
+  name: Anthropic/hh-rlhf
+  train_split: train
+  max_prompt_length: 256
+  max_samples: null
+
+generation:
+  max_new_tokens: 64
+  temperature: 1.0
+  top_k: 0.0
+  top_p: 1.0
+
+ppo:
+  total_episodes: 10000      # total prompts processed across all updates
+  rollout_batch_size: 32     # prompts sampled per PPO iteration
+  mini_batch_size: 8         # optimization minibatch
+  ppo_epochs: 4              # optimization passes per rollout
+  gamma: 1.0
+  lam: 0.95                  # GAE lambda
+  cliprange: 0.2             # policy ratio clip
+  cliprange_value: 0.2       # value clip
+  vf_coef: 0.1               # value loss weight
+  ent_coef: 0.0              # entropy bonus weight
+  lr: 1.0e-6
+  max_grad_norm: 1.0
+  whiten_advantages: true
+  whiten_rewards: false
+  kl:
+    adaptive: true
+    init_coef: 0.2           # beta: KL penalty coefficient
+    target: 6.0              # target KL per sequence
+    horizon: 10000
+  score_clip: null           # optional clip on reward-model scores, e.g. 5.0
+  log_every: 1
+  save_every: 50

@@ -1,0 +1,15 @@
+# Core
+torch>=2.2
+transformers>=4.44
+datasets>=2.20
+accelerate>=0.33
+peft>=0.12
+numpy
+tqdm
+pyyaml
+
+# Logging / eval (optional but imported lazily where possible)
+tensorboard
+
+# Optional: experiment tracking. Uncomment to use --report_to wandb
+# wandb

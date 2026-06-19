@@ -1,0 +1,11 @@
+# Tiny end-to-end smoke test config (CPU/MPS, seconds-to-minutes).
+# Used by scripts/smoke_test.py. Overrides the per-stage defaults with a
+# tiny random GPT-2 and a handful of synthetic / truncated examples.
+seed: 0
+device: auto
+model_name: sshleifer/tiny-gpt2   # ~random tiny GPT-2, fast on CPU
+max_length: 64
+max_prompt_length: 24
+max_new_tokens: 12
+n_examples: 16
+batch_size: 4
