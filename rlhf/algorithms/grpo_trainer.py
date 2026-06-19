@@ -15,18 +15,8 @@ from transformers import GenerationConfig
 
 from ..data import PromptCollator
 from ..utils.common import disable_dropout, get_logger
-from ..utils.tensor_ops import logprobs_from_logits, masked_mean
+from ..utils.tensor_ops import logprobs_from_logits, masked_mean, response_mask
 from .common import save_tokenizer
-
-
-def _response_mask(responses: torch.Tensor, eos_id: int) -> torch.Tensor:
-    B, G = responses.shape
-    is_eos = responses == eos_id
-    has_eos = is_eos.any(dim=1)
-    first = torch.where(has_eos, is_eos.float().argmax(dim=1),
-                        torch.full((B,), G, device=responses.device).float())
-    idx = torch.arange(G, device=responses.device).unsqueeze(0)
-    return (idx <= first.unsqueeze(1)).float()
 
 
 class GRPOTrainer:
@@ -79,7 +69,7 @@ class GRPOTrainer:
 
         seqs = self.policy.generate(ids, attn, self._gen_config())
         responses = seqs[:, P:]
-        resp_mask = _response_mask(responses, self.tokenizer.eos_token_id)
+        resp_mask = response_mask(responses, self.tokenizer.eos_token_id)
         full_attn = torch.cat([attn, resp_mask], dim=1)
 
         scores = self.reward_model(seqs, full_attn).float()                 # [N]

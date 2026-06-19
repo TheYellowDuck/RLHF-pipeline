@@ -14,6 +14,7 @@ from .tensor_ops import (
     masked_var,
     masked_whiten,
     compute_gae,
+    response_mask,
     flatten_dict,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "masked_var",
     "masked_whiten",
     "compute_gae",
+    "response_mask",
     "flatten_dict",
 ]

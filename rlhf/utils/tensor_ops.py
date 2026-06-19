@@ -83,6 +83,25 @@ def compute_gae(
     return advantages, returns
 
 
+def response_mask(responses: torch.Tensor, eos_id: int) -> torch.Tensor:
+    """1.0 up to and including the first EOS per row, 0.0 after.
+
+    Robust when pad_token_id == eos_token_id (as for GPT-2): generation fills
+    finished rows with EOS/pad, so the FIRST EOS marks the true stop token.
+    responses: [B, G] -> mask [B, G].
+    """
+    B, G = responses.shape
+    is_eos = responses == eos_id
+    has_eos = is_eos.any(dim=1)
+    first_eos = torch.where(
+        has_eos,
+        is_eos.float().argmax(dim=1),
+        torch.full((B,), G, device=responses.device, dtype=torch.float),
+    )
+    idx = torch.arange(G, device=responses.device).unsqueeze(0)
+    return (idx <= first_eos.unsqueeze(1)).float()
+
+
 def flatten_dict(d: dict, parent: str = "", sep: str = "/") -> dict[str, Any]:
     """Flatten nested dicts for metric logging: {'a': {'b': 1}} -> {'a/b': 1}."""
     out: dict[str, Any] = {}

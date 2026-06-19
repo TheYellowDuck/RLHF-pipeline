@@ -29,6 +29,7 @@ from ..utils.tensor_ops import (
     logprobs_from_logits,
     masked_mean,
     masked_whiten,
+    response_mask,
 )
 from .common import save_tokenizer
 
@@ -102,18 +103,6 @@ class PPOTrainer:
             eos_token_id=self.tokenizer.eos_token_id,
         )
 
-    def _response_mask(self, responses: torch.Tensor) -> torch.Tensor:
-        """1 up to and including the first EOS, 0 afterwards (pad == eos safe)."""
-        B, G = responses.shape
-        eos_id = self.tokenizer.eos_token_id
-        is_eos = responses == eos_id
-        has_eos = is_eos.any(dim=1)
-        first_eos = torch.where(
-            has_eos, is_eos.float().argmax(dim=1), torch.full((B,), G, device=responses.device).float()
-        )
-        idx = torch.arange(G, device=responses.device).unsqueeze(0)
-        return (idx <= first_eos.unsqueeze(1)).float()
-
     # --- forward helpers (response slice P-1:T-1) ---------------------------
     def _policy_forward(self, full_ids, full_attn, P):
         logits, values = self.policy(full_ids, full_attn)
@@ -141,7 +130,7 @@ class PPOTrainer:
 
         seqs = self.policy.generate(prompt_ids, prompt_attn, self._gen_config())
         responses = seqs[:, P:]
-        resp_mask = self._response_mask(responses)
+        resp_mask = response_mask(responses, self.tokenizer.eos_token_id)
         full_ids = seqs
         full_attn = torch.cat([prompt_attn, resp_mask], dim=1)
 
