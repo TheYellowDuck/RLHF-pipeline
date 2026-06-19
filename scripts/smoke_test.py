@@ -49,6 +49,58 @@ def check_finite(model, where):
             raise AssertionError(f"non-finite parameter {n} after {where}")
 
 
+class _TokenCountReward(torch.nn.Module):
+    """Closed-form toy reward: +1 per occurrence of a target token (for the PPO
+    learning check). vocab_size=None so the trainer's tokenizer guard is skipped."""
+
+    def __init__(self, target_id):
+        super().__init__()
+        self.target_id = target_id
+        self.config = type("C", (), {"vocab_size": None})()
+
+    def forward(self, input_ids, attention_mask=None):
+        return (input_ids == self.target_id).float().sum(dim=1)
+
+
+def ppo_learning_check(tok):
+    """Prove PPO *optimizes* (deterministically): a single PPO update on a fixed
+    rollout with positive advantage must INCREASE the log-prob of those tokens —
+    the defining property of policy gradient. (A generation-based 'does it learn'
+    test is unreliable on a 2-dim random tiny model; this tests the update directly.)"""
+    banner("learning check: PPO step raises log-prob of positive-advantage tokens")
+    set_seed(0)
+    policy = ActorCriticPolicy.from_pretrained_lm(MODEL, dtype=torch.float32)
+    ref = load_causal_lm(MODEL, dtype=torch.float32)
+    cfg = Config(dict(
+        output_dir=f"{OUT}/ppo_dir", data=dict(max_prompt_length=8),
+        generation=dict(max_new_tokens=4),
+        ppo=dict(total_episodes=4, rollout_batch_size=4, mini_batch_size=4, ppo_epochs=1,
+                 gamma=1.0, lam=0.95, cliprange=0.2, cliprange_value=0.2, vf_coef=0.0, ent_coef=0.0,
+                 lr=1e-2, max_grad_norm=100.0, whiten_advantages=False,
+                 kl=dict(adaptive=False, init_coef=0.0, target=6.0, horizon=10))))
+    trainer = PPOTrainer(policy, _TokenCountReward(0), tok, cfg, DEVICE, ref_model=ref)
+
+    P = 8
+    ptoks = (tok("the cat sat on the mat today", add_special_tokens=False)["input_ids"] * 2)[:P]
+    resp = tok(" yes please", add_special_tokens=False)["input_ids"]
+    full = torch.tensor([ptoks + resp] * 4, device=DEVICE)
+    attn = torch.ones_like(full)
+    G = len(resp)
+    resp_mask = torch.ones(4, G, device=DEVICE)
+    old_logp, old_vals, _ = trainer._policy_forward(full, attn, P)
+    adv = torch.ones(4, G, device=DEVICE)                       # positive advantage everywhere
+    batch = dict(full_ids=full, full_attn=attn, resp_mask=resp_mask, P=P,
+                 old_logp=old_logp.detach(), old_values=old_vals.detach(),
+                 advantages=adv, returns=(adv + old_vals).detach())
+
+    before = trainer._policy_forward(full, attn, P)[0].detach()
+    trainer._optimize(batch)
+    after = trainer._policy_forward(full, attn, P)[0].detach()
+    delta = (after - before).mean().item()
+    print(f"  mean Δ log-prob (positive-advantage tokens) = {delta:+.4f}")
+    assert delta > 0, f"PPO step did not increase log-prob of positive-advantage tokens (Δ={delta:+.4f})"
+
+
 def learning_check(tok):
     """Prove the reward model *optimizes*, not just runs: it must learn a
     last-token-separable signal (chosen ends ' good', rejected ends ' bad')."""
@@ -151,6 +203,7 @@ def main():
     check_finite(grpo_policy, "GRPO train")
 
     learning_check(tok)
+    ppo_learning_check(tok)
 
     # ---- bonus: accelerate path (single-process CPU) ---------------------
     banner("bonus: accelerate path (single-process)")
