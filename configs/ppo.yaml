@@ -40,6 +40,9 @@ ppo:
   max_grad_norm: 1.0
   whiten_advantages: true
   whiten_rewards: false
+  normalize_rewards: false   # running standardization of RM scores (stable advantage scale)
+  length_penalty: 0.0        # per-token reward cost; curbs length exploitation
+  missing_eos_penalty: 0.0   # score penalty for responses that never emit EOS
   kl:
     adaptive: true
     init_coef: 0.2           # beta: KL penalty coefficient

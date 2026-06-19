@@ -23,6 +23,7 @@ from transformers import GenerationConfig
 
 from ..data import PromptCollator
 from ..utils.common import disable_dropout, get_logger
+from ..utils.running import RunningMoments
 from ..utils.tensor_ops import (
     compute_gae,
     entropy_from_logits,
@@ -88,6 +89,7 @@ class PPOTrainer:
         self.opt = torch.optim.AdamW(
             [p for p in self.policy.parameters() if p.requires_grad], lr=pc.lr
         )
+        self.reward_norm = RunningMoments() if pc.get("normalize_rewards", False) else None
         self.global_step = 0
 
     # --- generation ---------------------------------------------------------
@@ -136,14 +138,28 @@ class PPOTrainer:
 
         logp, values, _ = self._policy_forward(full_ids, full_attn, P)
         ref_logp = self._ref_logprobs(full_ids, full_attn, P)
-        scores = self.reward_model(full_ids, full_attn).float()
+        scores_raw = self.reward_model(full_ids, full_attn).float()
         if self.cfg.ppo.get("score_clip", None):
             c = float(self.cfg.ppo.score_clip)
-            scores = scores.clamp(-c, c)
+            scores_raw = scores_raw.clamp(-c, c)
 
-        # per-token reward = -beta * KL(policy||ref) + score at last response token
+        # EOS handling: penalize responses that never terminated (length/degenerate guard)
+        has_eos = (responses == self.tokenizer.eos_token_id).any(dim=1)
+        scores = scores_raw.clone()
+        miss_pen = float(self.cfg.ppo.get("missing_eos_penalty", 0.0) or 0.0)
+        if miss_pen:
+            scores = scores - miss_pen * (~has_eos).float()
+        # Running standardization keeps the advantage scale stable as the policy drifts.
+        if self.reward_norm is not None:
+            self.reward_norm.update(scores)
+            scores = (scores - self.reward_norm.mean) / (self.reward_norm.std + 1e-8)
+
+        # per-token reward = -beta*KL  (minus a per-token length cost);  + score at last token
         kl = logp - ref_logp
         rewards = -self.kl_ctl.value * kl
+        len_pen = float(self.cfg.ppo.get("length_penalty", 0.0) or 0.0)
+        if len_pen:
+            rewards = rewards - len_pen
         last_idx = (resp_mask.sum(dim=1).long() - 1).clamp_min(0)
         rows = torch.arange(rewards.size(0), device=self.device)
         rewards[rows, last_idx] += scores
@@ -161,7 +177,8 @@ class PPOTrainer:
         return {
             "full_ids": full_ids, "full_attn": full_attn, "resp_mask": resp_mask, "P": P,
             "old_logp": logp, "old_values": values, "advantages": advantages, "returns": returns,
-            "scores": scores, "kl": kl, "resp_len": resp_mask.sum(dim=1),
+            "scores": scores_raw, "kl": kl, "resp_len": resp_mask.sum(dim=1),
+            "frac_eos": has_eos.float().mean(),
         }
 
     # --- PPO optimization over one rollout ----------------------------------
@@ -242,6 +259,7 @@ class PPOTrainer:
                         "reward/kl_seq": mean_kl,
                         "reward/kl_coef": self.kl_ctl.value,
                         "reward/resp_len": rollout["resp_len"].float().mean().item(),
+                        "reward/frac_eos": rollout["frac_eos"].item(),
                         "adv/mean": masked_mean(rollout["advantages"], rollout["resp_mask"]).item(),
                         "loss/policy": opt_stats["pg_loss"],
                         "loss/value": opt_stats["vf_loss"],

@@ -15,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from rlhf.algorithms.reward_trainer import bradley_terry_loss
 from rlhf.algorithms.dpo_trainer import dpo_loss
 from rlhf.models.reward_model import last_token_indices
+from rlhf.utils.running import RunningMoments
 from rlhf.utils import (
     Config,
     apply_overrides,
@@ -120,6 +121,16 @@ def test_last_token_indices_left_and_right_padding():
     # batch with differing real lengths
     idx = last_token_indices(torch.tensor([[0, 1, 1, 0, 0], [0, 0, 0, 1, 1]]))
     assert idx.tolist() == [2, 4]
+
+
+def test_running_moments_converges():
+    torch.manual_seed(0)
+    rm = RunningMoments()
+    data = torch.randn(5000) * 3.0 + 7.0  # mean 7, std 3
+    for i in range(0, 5000, 100):
+        rm.update(data[i:i + 100])
+    assert abs(rm.mean - 7.0) < 0.3
+    assert abs(rm.std - 3.0) < 0.3
 
 
 def test_config_override_coercion():

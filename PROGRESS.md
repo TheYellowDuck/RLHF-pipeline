@@ -39,11 +39,19 @@ Default preference data: `Anthropic/hh-rlhf` (+ `Dahoas/rm-static` fallback).
 - [x] M10 CLI scripts (train_*/evaluate) + Kaggle notebook + README + pyproject
 - [x] M11 Unit tests green (11 passed); reward-model CLI verified on real HH-RLHF
 
-## STATUS: COMPLETE ✅
-All milestones done. `python scripts/smoke_test.py` + `pytest tests/` are green.
-Real training runs via scripts/ (local small models) or notebooks/kaggle_rlhf.ipynb (GPU).
-Future work if asked: multi-GPU/accelerate sharding, vLLM rollouts, RLAIF, length-penalty/
-reward-norm ablations, online DPO. Nothing pending — heartbeat may stop (see below).
+## Core pipeline: COMPLETE ✅ (M0-M11). Now in ENHANCEMENTS phase (user: "all recommend or more").
+
+## Enhancements (live work)
+- [x] E0  Fix: reward model scored wrong token under left-padded prompts (PPO/GRPO)
+- [x] E1  PPO stability pack: running reward normalization + length/EOS penalties + richer KL/reward logging   <-- NEXT
+- [ ] E2  LLM-judge eval (Claude API via `anthropic` SDK, model claude-opus-4-8): independent win-rate,
+        position-bias control, graceful no-key fallback, mock-tested parsing
+- [ ] E3  Gradient-checkpointing flag wired through trainers (memory on Kaggle)
+- [ ] E4  accelerate multi-GPU (DDP) for supervised trainers (SFT/RM/DPO); verify single-process smoke
+- [ ] E5  vLLM rollout backend behind a flag with HF fallback (untestable locally; documented)
+- [ ] E6  Re-run smoke + unit tests, update README/PROGRESS, commit
+
+After each enhancement: smoke_test.py + pytest must stay green; commit a checkpoint.
 
 ## Notes / decisions log
 - 2026-06-19: durable cron flag did not persist to disk in this harness build;

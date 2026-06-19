@@ -90,7 +90,8 @@ def main():
         ppo=dict(total_episodes=16, rollout_batch_size=8, mini_batch_size=4, ppo_epochs=2,
                  gamma=1.0, lam=0.95, cliprange=0.2, cliprange_value=0.2, vf_coef=0.1,
                  ent_coef=0.01, lr=1e-4, max_grad_norm=1.0, whiten_advantages=True,
-                 whiten_rewards=False, log_every=1, save_every=1000,
+                 whiten_rewards=False, normalize_rewards=True, length_penalty=0.01,
+                 missing_eos_penalty=1.0, log_every=1, save_every=1000,
                  kl=dict(adaptive=True, init_coef=0.2, target=6.0, horizon=10000))))
     PPOTrainer(policy, reward_model, tok, ppo_cfg, DEVICE, ref_model=ref).train(prompt_ds)
     check_finite(policy, "PPO train")
