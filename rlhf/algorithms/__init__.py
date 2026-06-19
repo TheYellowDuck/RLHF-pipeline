@@ -4,6 +4,7 @@ from .common import (
     build_scheduler,
     move_to_device,
     save_tokenizer,
+    setup_gradient_checkpointing,
 )
 from .reward_trainer import RewardTrainer, bradley_terry_loss
 from .sft_trainer import SFTTrainer
@@ -17,6 +18,7 @@ __all__ = [
     "build_scheduler",
     "move_to_device",
     "save_tokenizer",
+    "setup_gradient_checkpointing",
     "RewardTrainer",
     "bradley_terry_loss",
     "SFTTrainer",

@@ -13,7 +13,14 @@ from torch.utils.data import DataLoader
 from ..data import DPOCollator
 from ..utils.common import get_logger
 from ..utils.tensor_ops import logprobs_from_logits
-from .common import autocast_ctx, build_optimizer, build_scheduler, move_to_device, save_tokenizer
+from .common import (
+    autocast_ctx,
+    build_optimizer,
+    build_scheduler,
+    move_to_device,
+    save_tokenizer,
+    setup_gradient_checkpointing,
+)
 
 
 def dpo_loss(policy_chosen_logps, policy_rejected_logps, ref_chosen_logps, ref_rejected_logps,
@@ -56,6 +63,7 @@ class DPOTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.dpo")
         self.bf16 = bool(cfg.train.get("bf16", False))
+        setup_gradient_checkpointing(self.model, cfg.train.get("gradient_checkpointing", False))
         self.global_step = 0
 
     def _seq_logps(self, model, input_ids, attention_mask, loss_mask):

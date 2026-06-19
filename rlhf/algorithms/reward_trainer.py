@@ -28,6 +28,8 @@ class RewardTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.reward")
         self.bf16 = bool(cfg.train.get("bf16", False))
+        if cfg.train.get("gradient_checkpointing", False):
+            self.model.enable_gradient_checkpointing()
         self.global_step = 0
 
     def _loader(self, ds, shuffle: bool):

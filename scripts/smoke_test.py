@@ -59,6 +59,7 @@ def main():
 
     train_cfg = dict(epochs=1, batch_size=4, grad_accum=1, lr=1e-4, weight_decay=0.0,
                      warmup_ratio=0.0, max_grad_norm=1.0, bf16=False,
+                     gradient_checkpointing=True,  # exercise the memory-saving path
                      log_every=2, eval_every=1000, save_every=1000)
 
     # ---- 1. Reward model -------------------------------------------------

@@ -67,8 +67,16 @@ class RewardModel(nn.Module):
         return cls(backbone, hidden_size)
 
     def enable_gradient_checkpointing(self):
+        if getattr(self.backbone, "config", None) is not None:
+            self.backbone.config.use_cache = False
         if hasattr(self.backbone, "gradient_checkpointing_enable"):
-            self.backbone.gradient_checkpointing_enable()
+            try:
+                self.backbone.gradient_checkpointing_enable(
+                    gradient_checkpointing_kwargs={"use_reentrant": False})
+            except TypeError:
+                self.backbone.gradient_checkpointing_enable()
+        if hasattr(self.backbone, "enable_input_require_grads"):
+            self.backbone.enable_input_require_grads()
 
     def save_pretrained(self, path: str):
         os.makedirs(path, exist_ok=True)

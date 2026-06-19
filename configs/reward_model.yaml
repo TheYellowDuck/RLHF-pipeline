@@ -26,6 +26,7 @@ train:
   warmup_ratio: 0.03
   max_grad_norm: 1.0
   bf16: true
+  gradient_checkpointing: false   # trade compute for memory on large models
   log_every: 10
   eval_every: 200
   save_every: 500

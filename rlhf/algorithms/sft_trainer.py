@@ -9,7 +9,14 @@ from torch.utils.data import DataLoader
 
 from ..data import SFTCollator
 from ..utils.common import get_logger
-from .common import autocast_ctx, build_optimizer, build_scheduler, move_to_device, save_tokenizer
+from .common import (
+    autocast_ctx,
+    build_optimizer,
+    build_scheduler,
+    move_to_device,
+    save_tokenizer,
+    setup_gradient_checkpointing,
+)
 
 
 class SFTTrainer:
@@ -23,6 +30,7 @@ class SFTTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.sft")
         self.bf16 = bool(cfg.train.get("bf16", False))
+        setup_gradient_checkpointing(self.model, cfg.train.get("gradient_checkpointing", False))
         self.global_step = 0
 
     def _loader(self, ds, shuffle):
