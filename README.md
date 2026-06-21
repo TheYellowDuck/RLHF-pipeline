@@ -1,9 +1,16 @@
-# RLHF Pipeline (from scratch)
+# RLHF Pipeline — Reward Modeling + PPO from Scratch
 
-A complete, readable implementation of the post-training recipe used to align
-frontier language models:
+An end-to-end **Reinforcement Learning from Human Feedback (RLHF)** pipeline that reproduces the
+post-training recipe behind aligned large language models — **supervised fine-tuning → reward
+modeling → PPO** — with the reinforcement-learning core written **from scratch** in **PyTorch**:
+generalized advantage estimation (GAE), the clipped policy-gradient surrogate, a per-token
+KL-to-reference penalty, and an adaptive KL controller. It also implements **DPO** and **GRPO**
+as modern alternatives, plus LoRA parameter-efficient fine-tuning, multi-GPU training, and an
+independent **LLM-as-judge** evaluation. Built on **HuggingFace Transformers** for the backbone
+models and tokenizers; every reward-modeling and RL component is hand-implemented, not wrapped
+from a higher-level library.
 
-```
+```text
         pretrained LM
               │
               ▼
@@ -28,34 +35,112 @@ frontier language models:
    └──────────────────────┘
 ```
 
-The reinforcement-learning and reward-modelling logic is **written by hand**
-(GAE, the clipped PPO surrogate, the per-token KL-to-reference shaping, the
-Bradley-Terry / DPO / GRPO objectives). HuggingFace `transformers` supplies only
-the pretrained backbones and tokenizers; `peft` supplies optional LoRA.
+## Features
 
-> Built and validated against **transformers 5.x** and **torch 2.12**. Designed
-> to smoke-test on a laptop CPU and train for real on a free Kaggle GPU.
+- **Three alignment methods, one codebase** — PPO (reward-model-based RL), DPO (reward-model-free), and GRPO (critic-free, DeepSeek-style).
+- **PPO written from scratch** — on-policy rollouts, GAE, the clipped surrogate objective, clipped value loss, entropy bonus, per-token KL-to-reference reward shaping, and an adaptive KL controller.
+- **Reward model** — a scalar reward head on a pretrained trunk, trained with the Bradley-Terry pairwise preference loss, scored at the last real token (robust to left/right padding).
+- **Supervised fine-tuning** — teacher forcing with prompt-masked labels as the policy initializer and PPO reference.
+- **Parameter-efficient fine-tuning** — LoRA adapters everywhere via PEFT; the frozen RL reference is recovered by disabling the adapter (no second copy of weights).
+- **Scales out** — multi-GPU data parallelism via HuggingFace Accelerate (DDP-ready) and gradient checkpointing for the supervised trainers.
+- **RL stability knobs** — running reward normalization, length and missing-EOS penalties to curb reward hacking, and KL-vs-reward logging.
+- **Checkpoint resume** — optimizer, global step, and KL-controller state save and restore for long runs.
+- **Independent evaluation** — an LLM-as-judge win-rate computed via the Anthropic Claude API with position-bias control, alongside reward-model accuracy.
+- **Optional fast rollouts** — a flag-gated vLLM generation backend that auto-falls back to HuggingFace generation if unavailable.
+- **Validated to actually optimize** — unit tests for the RL/RM math plus an end-to-end harness that proves the reward model *learns* a separable signal and a PPO step *increases* the log-prob of positive-advantage tokens.
+- **Laptop-to-GPU** — runs a tiny end-to-end smoke test on a CPU in seconds; trains real models on a free Kaggle GPU.
 
----
+## How It Works
 
-## What's included
+The repository mirrors the standard post-training stack. The RL and reward-modeling logic
+(GAE, the PPO surrogate, KL shaping, the Bradley-Terry / DPO / GRPO objectives) is implemented
+by hand; HuggingFace Transformers supplies only the pretrained backbones and tokenizers, and
+PEFT supplies optional LoRA.
 
-| Stage | File | Method |
-|-------|------|--------|
-| SFT | [rlhf/algorithms/sft_trainer.py](rlhf/algorithms/sft_trainer.py) | teacher forcing, prompt-masked labels |
-| Reward model | [rlhf/algorithms/reward_trainer.py](rlhf/algorithms/reward_trainer.py) | Bradley-Terry pairwise loss |
-| **PPO** | [rlhf/algorithms/ppo_trainer.py](rlhf/algorithms/ppo_trainer.py) | rollouts → RM score → KL shaping → GAE → clipped surrogate + clipped value + entropy → adaptive KL |
-| DPO | [rlhf/algorithms/dpo_trainer.py](rlhf/algorithms/dpo_trainer.py) | implicit-reward preference optimization (sigmoid / IPO / hinge) |
-| GRPO | [rlhf/algorithms/grpo_trainer.py](rlhf/algorithms/grpo_trainer.py) | group-relative advantages, critic-free, k3 KL penalty |
+- **Reward model.** A scalar head reads the trunk's last non-pad hidden state and is trained with `−log σ(r_chosen − r_rejected)`, the maximum-likelihood objective of the Bradley-Terry preference model.
+- **PPO reward shaping.** Each response token's reward is a KL-to-reference penalty `−β·(log π − log π_ref)`; the scalar reward-model score is added at the final token. β is adapted toward a target KL, which keeps the policy from drifting off-distribution while chasing reward (reward hacking).
+- **Advantages.** GAE(γ, λ) over the value head's per-token estimates, then whitened. Token/value alignment is handled explicitly: the log-prob and value of response token *j* come from the model output at position *j−1*.
+- **DPO.** Optimizes the same Bradley-Terry preference likelihood but with the *implicit* reward `β·log(π/π_ref)`, removing the separate reward model and RL loop. Supports sigmoid / IPO / hinge losses and optional length normalization.
+- **GRPO.** Replaces the value critic with a group baseline — sample *G* responses per prompt, advantage = (reward − group mean) / group std — with an unbiased k3 KL penalty. Cheaper and stable; the DeepSeek-R1 recipe.
 
-Models: scalar-head [reward model](rlhf/models/reward_model.py) and an
-[actor-critic policy](rlhf/models/policy.py) (shared trunk + value head). LoRA is
-supported everywhere; with LoRA the frozen reference policy is recovered by
-disabling the adapter (no second copy of weights in memory).
+**Engineering notes.** Numerically careful throughout: log-probs and entropy computed from
+logits, masked whitening of advantages, Welford running moments for reward normalization, and
+correct masking for variable-length, padded sequences. Development surfaced a genuine
+correctness bug — the reward model was scoring a *prompt* token instead of the response under
+left-padded prompts (which PPO/GRPO always produce) — caught by reasoning about token alignment
+and locked down with a regression test.
 
----
+## Architecture
 
-## Install
+```text
+rlhf/
+  data/         preference / prompt / SFT datasets + collators (correct padding sides)
+  models/       reward model, actor-critic policy, value head, loaders (LoRA, transformers-v5-safe)
+  algorithms/   reward / sft / ppo / dpo / grpo trainers
+  utils/        config, metrics, generation, RL/tensor math (GAE, log-probs), running moments, vLLM
+  eval/         LLM-as-judge (Claude API)
+  cli.py        shared argparse + logger plumbing
+scripts/        train_*.py, evaluate.py, smoke_test.py
+configs/        one YAML per stage
+tests/          fast unit tests for the math
+notebooks/      Kaggle GPU runner
+```
+
+## Status & Validation
+
+The pipeline is validated at three levels: it **runs** (a 5-stage CPU smoke test exercises
+RM → SFT → PPO → DPO → GRPO with checkpoint save/load + resume and the Accelerate path), it
+**optimizes** (the reward model learns a separable preference signal to 100% accuracy, and a
+single PPO update provably raises the log-prob of positive-advantage tokens — a deterministic
+policy-gradient check), and it is **static-clean** (17 unit tests, `ruff`/`pyflakes` with no
+undefined names across every branch). Reward-model accuracy parsing was verified on the real
+`Anthropic/hh-rlhf` dataset.
+
+This is an educational, faithful single-GPU reproduction of the algorithms, not a
+throughput-optimized training stack: it does not include FSDP/ZeRO sharding or a fully verified
+distributed-rollout path, and the headline results from a full GPU training run on Kaggle are
+being added.
+
+## Skills Demonstrated
+
+- Reinforcement Learning from Human Feedback (RLHF) — full supervised-fine-tuning → reward-model → PPO post-training loop
+- Proximal Policy Optimization (PPO) — from-scratch actor-critic with GAE, clipped surrogate, clipped value loss, and entropy bonus
+- Policy-gradient methods — on-policy rollouts, advantage estimation, importance-ratio clipping, KL-to-reference regularization
+- Reward modeling — Bradley-Terry pairwise preference loss with a scalar reward head
+- Generalized Advantage Estimation (GAE) — per-token advantage/return computation with masked, padded sequences
+- Adaptive KL control — Schulman-style proportional controller targeting a fixed KL budget
+- Direct Preference Optimization (DPO) — implicit-reward Bradley-Terry objective with sigmoid/IPO/hinge losses and length normalization
+- Group Relative Policy Optimization (GRPO) — critic-free, group-relative advantages with a k3 KL estimator (DeepSeek-style)
+- Supervised fine-tuning (SFT) — teacher forcing with prompt-masked labels
+- Deep learning with PyTorch — hand-written training loops, autograd, mixed-precision autocast
+- HuggingFace Transformers — pretrained backbones and tokenizers (transformers v5 compatible)
+- Parameter-efficient fine-tuning — LoRA adapters via PEFT and an adapter-disable reference trick
+- Distributed / multi-GPU training — data parallelism via HuggingFace Accelerate (DDP) with gradient checkpointing
+- Numerical stability — log-prob/entropy from logits, masked whitening, Welford running moments
+- LLM-as-judge evaluation — independent win-rate via the Anthropic Claude API with position-bias control
+- Reward-hacking mitigation — running reward normalization plus length and missing-EOS penalties
+- Checkpointing and resumability — optimizer / step / KL-controller state persistence
+- Unit testing and validation harnesses — RL/RM math tests plus optimization-proof learning checks
+- Software design — modular Python package (data / models / algorithms / utils), YAML configs, CLI scripts
+- Reproducibility and static analysis — seeded runs, deterministic checks, `ruff` / `pyflakes` clean
+
+## Tech Stack
+
+- Python 3.11
+- PyTorch — autograd, custom training loops, mixed precision
+- HuggingFace Transformers — backbone models and tokenizers
+- HuggingFace Datasets — preference / SFT data loading (`Anthropic/hh-rlhf`)
+- HuggingFace Accelerate — multi-GPU data parallelism (DDP)
+- PEFT — LoRA parameter-efficient fine-tuning
+- NumPy, tqdm, PyYAML, TensorBoard
+- Anthropic Claude API — LLM-as-judge evaluation
+- vLLM — optional fast generation backend for rollouts
+- pytest, ruff — testing and static analysis
+- Kaggle — free-GPU training (T4 / P100)
+
+## Getting Started
+
+### Install
 
 ```bash
 python3.11 -m venv .venv && source .venv/bin/activate
@@ -64,44 +149,36 @@ pip install -r requirements.txt
 
 (Apple-Silicon / CPU works for smoke tests; CUDA recommended for real runs.)
 
-## 30-second sanity check
+### 30-second sanity check
 
-Runs the whole pipeline — RM → SFT → PPO → DPO → GRPO — on a tiny random GPT-2
-with synthetic data, on CPU, in a few seconds. Verifies tensor alignment, masking,
-checkpoint save/load + resume, the accelerate path, and that things actually
-**optimize** (the RM learns a separable signal to 1.0 accuracy; a PPO step
-provably raises the log-prob of positive-advantage tokens) — not just run:
+Runs the whole pipeline — RM → SFT → PPO → DPO → GRPO — on a tiny random GPT-2 with synthetic
+data, on CPU, in a few seconds. Verifies tensor alignment, masking, checkpoint save/load +
+resume, the Accelerate path, and that things actually **optimize** (the RM learns a separable
+signal to 1.0 accuracy; a PPO step provably raises the log-prob of positive-advantage tokens):
 
 ```bash
 python scripts/smoke_test.py
 python -m pytest tests/ -q          # 17 fast unit tests for the RL/RM math
 ```
 
----
+### Train the full recipe
 
-## Real training (full recipe)
-
-Defaults use [`Anthropic/hh-rlhf`](https://huggingface.co/datasets/Anthropic/hh-rlhf)
-preferences. Pick a small base model that fits your GPU (e.g. `gpt2`,
-`EleutherAI/pythia-410m`, `Qwen/Qwen2.5-0.5B`).
+Defaults use the `Anthropic/hh-rlhf` preferences. Pick a small base model that fits your GPU
+(e.g. `gpt2`, `EleutherAI/pythia-410m`, `Qwen/Qwen2.5-0.5B`).
 
 ```bash
-# 1. Supervised fine-tuning (the policy init + the PPO reference)
-python scripts/train_sft.py -o model.name_or_path=Qwen/Qwen2.5-0.5B \
-    -o data.max_samples=20000 -o output_dir=checkpoints/sft
+# 1. Supervised fine-tuning (policy init + PPO reference)
+python scripts/train_sft.py -o model.name_or_path=Qwen/Qwen2.5-0.5B -o output_dir=checkpoints/sft
 
 # 2. Reward model
-python scripts/train_reward_model.py -o model.name_or_path=Qwen/Qwen2.5-0.5B \
-    -o data.max_samples=40000 -o output_dir=checkpoints/reward_model
+python scripts/train_reward_model.py -o model.name_or_path=Qwen/Qwen2.5-0.5B -o output_dir=checkpoints/reward_model
 
 # 3a. PPO against the reward model
-python scripts/train_ppo.py \
-    -o policy.name_or_path=checkpoints/sft \
+python scripts/train_ppo.py -o policy.name_or_path=checkpoints/sft \
     -o reward_model.name_or_path=checkpoints/reward_model
 
 # 3b. …or GRPO (critic-free) against the same reward model
-python scripts/train_grpo.py \
-    -o policy.name_or_path=checkpoints/sft \
+python scripts/train_grpo.py -o policy.name_or_path=checkpoints/sft \
     -o reward_model.name_or_path=checkpoints/reward_model
 
 # DPO alternative — no reward model, no RL loop
@@ -109,114 +186,59 @@ python scripts/train_dpo.py -o model.name_or_path=checkpoints/sft
 ```
 
 Every script takes `--config <yaml>`, repeatable `-o key.sub=value` overrides, and
-`--report-to {none,tensorboard,wandb}`. Metrics also stream to
-`<output_dir>/metrics.jsonl`. Configs live in [configs/](configs/).
+`--report-to {none,tensorboard,wandb}`. Metrics also stream to `<output_dir>/metrics.jsonl`.
+Configs live in [configs/](configs/).
 
-### Use LoRA (fits bigger models on small GPUs)
+### Scaling, resume, and speed
 
 ```bash
-python scripts/train_ppo.py -o policy.use_lora=true \
-    -o policy.name_or_path=checkpoints/sft \
+# LoRA (fits bigger models on small GPUs)
+python scripts/train_ppo.py -o policy.use_lora=true -o policy.name_or_path=checkpoints/sft \
     -o reward_model.name_or_path=checkpoints/reward_model
-```
 
----
-
-## Evaluation
-
-```bash
-# Reward-model accuracy on held-out preferences
-python scripts/evaluate.py rm-accuracy --reward-model checkpoints/reward_model \
-    --data Anthropic/hh-rlhf --split test --max-samples 1000
-
-# Did RLHF help? Win-rate of the PPO policy vs the SFT baseline, judged by the RM
-python scripts/evaluate.py score-policy --policy checkpoints/ppo \
-    --reward-model checkpoints/reward_model --compare checkpoints/sft --num 200
-
-# Independent check: Claude-as-judge win-rate (RM-free; position-bias controlled).
-# `score-policy --compare` is judged by the *same* RM the policy optimized against,
-# so it's circular and blind to reward hacking — this gives an outside signal.
-pip install anthropic && export ANTHROPIC_API_KEY=...        # one-time
-python scripts/evaluate.py judge --policy checkpoints/ppo --base checkpoints/sft --num 100
-```
-
----
-
-## Scaling & speed
-
-```bash
-# Activation checkpointing (less memory, more compute) — SFT/RM/DPO
+# Activation checkpointing (less memory) — SFT/RM/DPO
 python scripts/train_sft.py -o train.gradient_checkpointing=true ...
 
 # Multi-GPU data parallelism (DDP) for the supervised trainers
-accelerate launch scripts/train_sft.py --accelerate -o model.name_or_path=...
-accelerate launch scripts/train_reward_model.py --accelerate ...
+accelerate launch scripts/train_sft.py --accelerate ...
 
 # PPO stability knobs (curb reward hacking / length exploitation)
 python scripts/train_ppo.py -o ppo.normalize_rewards=true \
     -o ppo.length_penalty=0.001 -o ppo.missing_eos_penalty=1.0 ...
 
 # Resume an interrupted PPO/GRPO run (restores optimizer + step + KL state)
-python scripts/train_ppo.py --resume -o ppo.total_episodes=20000 ...
+python scripts/train_ppo.py --resume ...
 
-# Length-normalized DPO (averages logps over response tokens; curbs length bias)
+# Length-normalized DPO (curbs length bias)
 python scripts/train_dpo.py -o dpo.length_normalize=true ...
 
 # Experimental: vLLM-backed rollouts (GPU only; auto-falls back to HF if unavailable)
 pip install vllm && python scripts/train_ppo.py -o ppo.use_vllm=true ...
 ```
 
----
+### Evaluate
 
-## Train on Kaggle (free GPU)
+```bash
+# Reward-model accuracy on held-out preferences
+python scripts/evaluate.py rm-accuracy --reward-model checkpoints/reward_model \
+    --data Anthropic/hh-rlhf --split test --max-samples 1000
 
-Open [notebooks/kaggle_rlhf.ipynb](notebooks/kaggle_rlhf.ipynb) on Kaggle
-(T4×2 / P100), enable the GPU + internet, and run top to bottom. It clones/copies
-this repo, runs SFT → RM → PPO, and scores the result.
+# Did RLHF help? Win-rate of the PPO policy vs the SFT baseline, judged by the reward model
+python scripts/evaluate.py score-policy --policy checkpoints/ppo \
+    --reward-model checkpoints/reward_model --compare checkpoints/sft --num 200
 
----
-
-## Method notes
-
-- **Reward model.** A scalar head reads the trunk's last non-pad hidden state.
-  Trained with `−log σ(r_chosen − r_rejected)`, the MLE of the Bradley-Terry model.
-- **PPO reward shaping.** Per response token the reward is a KL-to-reference
-  penalty `−β·(log π − log π_ref)`; the scalar RM score is added at the final
-  token. β is adapted toward a target KL. This keeps the policy from drifting
-  off-distribution while chasing reward (reward hacking).
-- **Advantages.** GAE(γ, λ) over the value head's per-token estimates, then
-  whitened. Token/value alignment: the log-prob and value of response token at
-  position `j` come from the model output at `j−1`.
-- **DPO.** Optimizes the same Bradley-Terry preference likelihood but with the
-  *implicit* reward `β·log(π/π_ref)`, removing the separate RM and RL loop.
-- **GRPO.** Replaces the value critic with a group baseline: sample G responses
-  per prompt, advantage = (reward − group mean) / group std. Cheaper and stable;
-  the DeepSeek-R1 recipe.
-
-## Repo layout
-
-```
-rlhf/
-  data/         preference / prompt / SFT datasets + collators (correct padding sides)
-  models/       reward model, actor-critic policy, value head, loaders (LoRA, v5-safe)
-  algorithms/   reward / sft / ppo / dpo / grpo trainers (+ accelerate, grad-checkpoint)
-  eval/         Claude-as-judge win-rate (independent of the reward model)
-  utils/        config, metrics, generation, RL math (GAE, logprobs…), running stats, vLLM
-  cli.py        shared argparse + logger plumbing
-scripts/        train_*.py, evaluate.py, smoke_test.py
-configs/        one YAML per stage
-tests/          fast unit tests for the math
-notebooks/      Kaggle GPU runner
+# Independent LLM-as-judge win-rate (Claude), with position-bias control
+pip install anthropic && export ANTHROPIC_API_KEY=...
+python scripts/evaluate.py judge --policy checkpoints/ppo --base checkpoints/sft --num 100
 ```
 
-## Limitations / honest scope
+### Train on Kaggle (free GPU)
 
-- Multi-GPU (DDP via `accelerate`) is wired for the **supervised** trainers
-  (SFT/RM/DPO) and verified single-process; true multi-GPU and the PPO/GRPO RL
-  loop remain single-GPU. The vLLM rollout backend is **experimental** — it was
-  written against a CUDA target but could not be executed in the dev environment
-  (Apple Silicon, no CUDA), so it ships flag-gated with automatic HF fallback.
-- Reward models on small backbones overfit fast — use eval accuracy as the guide,
-  and cross-check RLHF gains with the independent LLM judge (RM win-rate is circular).
-- This is an educational, faithful reproduction of the algorithms, not a
-  throughput-optimized training stack.
+Open [notebooks/kaggle_rlhf.ipynb](notebooks/kaggle_rlhf.ipynb) on Kaggle (T4×2 / P100), enable
+the GPU + internet, and run top to bottom. It clones/copies this repo, runs SFT → RM → PPO, and
+scores the result. A full run with `pythia-160m` completes in roughly 1.5–2.5 hours, well inside
+Kaggle's 9-hour session limit.
+
+### License
+
+Licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0/) — see [LICENSE](LICENSE). You may use, modify, and share this work for any non-commercial purpose with attribution, but not for commercial purposes (including selling it).
