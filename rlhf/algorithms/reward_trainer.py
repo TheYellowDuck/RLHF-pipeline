@@ -26,8 +26,21 @@ from .common import (
 )
 
 
-def bradley_terry_loss(chosen_rewards: torch.Tensor, rejected_rewards: torch.Tensor, margin: float = 0.0):
-    return -F.logsigmoid(chosen_rewards - rejected_rewards - margin).mean()
+def bradley_terry_loss(chosen_rewards: torch.Tensor, rejected_rewards: torch.Tensor,
+                       margin: float = 0.0, label_smoothing: float = 0.0):
+    """Bradley-Terry preference loss with optional margin + label smoothing.
+
+    ``margin`` pushes chosen above rejected by a fixed gap (Llama-2 style; helps on
+    clearly-separable pairs, arXiv:2307.09288). ``label_smoothing`` puts a small mass
+    on the *wrong* ordering, regularizing against noisy/mislabeled pairs — HH-RLHF
+    has ~25% effectively-mislabeled pairs (arXiv:2401.06080), so this helps held-out
+    accuracy on noisy preference data (cDPO-style soft labels).
+    """
+    diff = chosen_rewards - rejected_rewards - margin
+    if label_smoothing > 0.0:
+        return -((1.0 - label_smoothing) * F.logsigmoid(diff)
+                 + label_smoothing * F.logsigmoid(-diff)).mean()
+    return -F.logsigmoid(diff).mean()
 
 
 class RewardTrainer:
@@ -40,6 +53,8 @@ class RewardTrainer:
         self.metrics = metric_logger
         self.log = get_logger("rlhf.reward")
         self.bf16 = bool(cfg.train.get("bf16", False))
+        self.margin = float(cfg.train.get("margin", 0.0))
+        self.label_smoothing = float(cfg.train.get("label_smoothing", 0.0))
         if cfg.train.get("gradient_checkpointing", False):
             self.model.enable_gradient_checkpointing()
         self.global_step = 0
@@ -75,7 +90,7 @@ class RewardTrainer:
                 batch = move_to_device(batch, self.device)
                 with autocast_ctx(self.device, self.bf16):
                     c, r = self._scores(batch)
-                    loss = bradley_terry_loss(c, r) / grad_accum
+                    loss = bradley_terry_loss(c, r, self.margin, self.label_smoothing) / grad_accum
                 acc_backward(self.acc, loss)
                 micro += 1
                 if micro % grad_accum == 0:
@@ -109,7 +124,7 @@ class RewardTrainer:
             batch = move_to_device(batch, self.device)
             with autocast_ctx(self.device, self.bf16):
                 c, r = self._scores(batch)
-                loss = bradley_terry_loss(c, r)
+                loss = bradley_terry_loss(c, r, self.margin, self.label_smoothing)
             bsz = c.size(0)
             n += bsz
             correct += (c > r).sum().item()

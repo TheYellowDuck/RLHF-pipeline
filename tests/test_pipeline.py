@@ -90,6 +90,24 @@ def test_bradley_terry_loss_limits():
     assert abs(bradley_terry_loss(eq, eq).item() - math.log(2)) < 1e-5
 
 
+def test_bradley_terry_label_smoothing_and_margin():
+    big, small = torch.tensor([10.0]), torch.tensor([-10.0])
+    # smoothing keeps confident-correct loss away from 0 (regularizes vs noisy labels)
+    assert bradley_terry_loss(big, small, label_smoothing=0.1).item() > bradley_terry_loss(big, small).item()
+    eq = torch.tensor([0.0])
+    assert abs(bradley_terry_loss(eq, eq, label_smoothing=0.1).item() - math.log(2)) < 1e-5
+    # margin shrinks the effective gap -> higher loss for the same rewards
+    c, r = torch.tensor([1.0]), torch.tensor([0.0])
+    assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
+
+
+def test_pair_similarity():
+    from rlhf.data.preference import pair_similarity
+    assert pair_similarity("a b c", "a b c") == 1.0
+    assert pair_similarity("a b c", "x y z") == 0.0
+    assert abs(pair_similarity("a b c d", "a b x y") - 2 / 6) < 1e-9   # 2 shared / 6 union
+
+
 def test_dpo_loss_equal_policy_is_log2():
     z = torch.zeros(4)
     loss, c, r = dpo_loss(z, z, z, z, beta=0.1)

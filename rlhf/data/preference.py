@@ -47,31 +47,67 @@ def _normalize_explicit(example: dict) -> dict:
     }
 
 
+def _last_assistant(messages) -> str:
+    """Final assistant turn from a chat-message list (e.g. UltraFeedback)."""
+    for m in reversed(messages):
+        if isinstance(m, dict) and m.get("role") == "assistant":
+            return m.get("content", "")
+    return messages[-1].get("content", "") if messages else ""
+
+
+def _normalize_messages(example: dict) -> dict:
+    return {
+        "prompt": example.get("prompt", ""),
+        "chosen": _last_assistant(example["chosen"]),
+        "rejected": _last_assistant(example["rejected"]),
+    }
+
+
+def pair_similarity(a: str, b: str) -> float:
+    """Token-set Jaccard similarity of two responses (0 = disjoint, 1 = identical)."""
+    sa, sb = set(a.split()), set(b.split())
+    if not sa and not sb:
+        return 1.0
+    return len(sa & sb) / (len(sa | sb) or 1)
+
+
 def load_preference_dataset(
     name: str,
     split: str = "train",
     max_samples: int | None = None,
     num_proc: int | None = None,
+    max_pair_similarity: float = 1.0,
 ):
-    """Load + normalize a preference dataset to columns prompt/chosen/rejected."""
+    """Load + normalize a preference dataset to columns prompt/chosen/rejected.
+
+    ``max_pair_similarity`` < 1 drops near-identical (low-contrast) chosen/rejected
+    pairs by token-Jaccard. HH-RLHF has many low-contrast pairs; dropping them raises
+    held-out RM accuracy, most so for small models (arXiv:2409.09603). Filtering runs
+    before ``max_samples`` so the cap is taken from the cleaned pool.
+    """
     from datasets import load_dataset
 
     ds = load_dataset(name, split=split)
-    if max_samples is not None:
-        ds = ds.select(range(min(max_samples, len(ds))))
-
     cols = set(ds.column_names)
     if {"chosen", "rejected"} <= cols and "prompt" not in cols:
         fn = _normalize_hh
     elif {"prompt", "chosen", "rejected"} <= cols:
-        fn = _normalize_explicit
+        # message-list format (e.g. UltraFeedback) vs plain strings (e.g. rm-static)
+        fn = _normalize_messages if isinstance(ds[0]["chosen"], list) else _normalize_explicit
     else:
         raise ValueError(
             f"Dataset '{name}' has columns {sorted(cols)}; expected HH-style "
-            "(chosen/rejected) or explicit (prompt/chosen/rejected)."
+            "(chosen/rejected), explicit (prompt/chosen/rejected), or chat-message lists."
         )
     ds = ds.map(fn, remove_columns=ds.column_names, num_proc=num_proc)
     ds = ds.filter(lambda ex: len(ex["chosen"]) > 0 and len(ex["rejected"]) > 0)
+    if max_pair_similarity < 1.0:
+        ds = ds.filter(
+            lambda ex: pair_similarity(ex["chosen"], ex["rejected"]) <= max_pair_similarity,
+            num_proc=num_proc,
+        )
+    if max_samples is not None:
+        ds = ds.select(range(min(max_samples, len(ds))))
     return ds
 
 

@@ -10,23 +10,28 @@ model:
   lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
 
 data:
-  name: Anthropic/hh-rlhf    # preference dataset (chosen/rejected)
+  name: Anthropic/hh-rlhf    # preference dataset; also supports UltraFeedback (cleaner):
+                             #   -o data.name=HuggingFaceH4/ultrafeedback_binarized -o data.train_split=train_prefs -o data.eval_split=test_prefs
   train_split: train
   eval_split: test
   max_samples: null          # cap train examples (null = all)
   max_eval_samples: 1000
   max_length: 512
+  max_pair_similarity: 0.5   # drop near-DUPLICATE pairs (token-Jaccard, train only). Rare on HH
+                             # (lexically diverse); bites harder on datasets with low-contrast pairs.
 
 train:
-  epochs: 1
+  epochs: 1                  # try 2 — multi-epoch RMs can help (arXiv:2506.01937); costs ~2x time
   batch_size: 8
-  grad_accum: 1
-  lr: 1.0e-5
+  grad_accum: 8              # effective batch ~64 (stabler RM; standard recipe uses 512)
+  lr: 5.0e-6                 # lower LR pairs with the larger effective batch
   weight_decay: 0.0
   warmup_ratio: 0.03
   max_grad_norm: 1.0
   bf16: true
   gradient_checkpointing: false   # trade compute for memory on large models
+  margin: 0.0                # Bradley-Terry margin (Llama-2 style; helps on separable pairs)
+  label_smoothing: 0.1       # soft labels — robust to HH-RLHF's ~25% noisy pairs
   log_every: 10
   eval_every: 200
   save_every: 500

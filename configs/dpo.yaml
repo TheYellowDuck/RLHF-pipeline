@@ -16,6 +16,7 @@ data:
   max_samples: null
   max_eval_samples: 1000
   max_length: 512
+  max_pair_similarity: 0.5   # drop near-duplicate pairs (token-Jaccard, train only)
 
 dpo:
   beta: 0.1                  # KL strength (implicit reward temperature)

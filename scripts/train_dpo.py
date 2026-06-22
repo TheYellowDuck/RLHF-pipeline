@@ -36,7 +36,9 @@ def main():
         model = apply_lora(model, cfg.model.get("lora", {}), task_type="CAUSAL_LM")
     ref = None if use_lora else load_causal_lm(cfg.model.name_or_path, dtype=dtype)
 
-    train_ds = load_preference_dataset(cfg.data.name, cfg.data.train_split, cfg.data.get("max_samples"))
+    train_ds = load_preference_dataset(
+        cfg.data.name, cfg.data.train_split, cfg.data.get("max_samples"),
+        max_pair_similarity=cfg.data.get("max_pair_similarity", 1.0))
     eval_ds = None
     if cfg.data.get("eval_split"):
         eval_ds = load_preference_dataset(cfg.data.name, cfg.data.eval_split, cfg.data.get("max_eval_samples"))
