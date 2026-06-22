@@ -38,7 +38,9 @@ def main():
 
     train_ds = load_preference_dataset(
         cfg.data.name, cfg.data.train_split, cfg.data.get("max_samples"),
-        max_pair_similarity=cfg.data.get("max_pair_similarity", 1.0))
+        max_pair_similarity=cfg.data.get("max_pair_similarity", 1.0),
+        contrast_metric=cfg.data.get("contrast_metric", "jaccard"),
+        embedding_model=cfg.data.get("embedding_model", "sentence-transformers/all-MiniLM-L6-v2"))
     eval_ds = None
     if cfg.data.get("eval_split"):  # eval on the standard (unfiltered) held-out set
         eval_ds = load_preference_dataset(cfg.data.name, cfg.data.eval_split, cfg.data.get("max_eval_samples"))

@@ -18,6 +18,9 @@ from typing import Sequence
 
 import torch
 
+from ..utils.common import get_logger
+
+_log = get_logger("rlhf.data")
 ASSISTANT_TAG = "\n\nAssistant:"
 
 
@@ -71,23 +74,60 @@ def pair_similarity(a: str, b: str) -> float:
     return len(sa & sb) / (len(sa | sb) or 1)
 
 
+def _embedding_keep_mask(chosen, rejected, max_cosine, model_name, batch_size=128, max_length=256):
+    """Keep-mask for pairs whose chosen/rejected EMBEDDING cosine <= max_cosine.
+
+    Semantic contrast (mean-pooled MiniLM via transformers — no extra dependency).
+    Dropping the most-similar (low-contrast) pairs can raise small-model RM accuracy
+    (arXiv:2409.09603); on HH the effect is modest (pairs are already contrastive).
+    """
+    import torch
+    from transformers import AutoModel, AutoTokenizer
+
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    tok = AutoTokenizer.from_pretrained(model_name)
+    enc = AutoModel.from_pretrained(model_name).to(device).eval()
+
+    @torch.no_grad()
+    def embed(texts):
+        chunks = []
+        for i in range(0, len(texts), batch_size):
+            b = tok(list(texts[i:i + batch_size]), padding=True, truncation=True,
+                    max_length=max_length, return_tensors="pt").to(device)
+            h = enc(**b).last_hidden_state
+            m = b["attention_mask"].unsqueeze(-1).float()
+            e = (h * m).sum(1) / m.sum(1).clamp_min(1e-9)        # mean pool
+            chunks.append(torch.nn.functional.normalize(e, dim=-1).cpu())
+        return torch.cat(chunks)
+
+    cos = (embed(chosen) * embed(rejected)).sum(-1)
+    return (cos <= max_cosine).tolist()
+
+
 def load_preference_dataset(
     name: str,
     split: str = "train",
     max_samples: int | None = None,
     num_proc: int | None = None,
     max_pair_similarity: float = 1.0,
+    contrast_metric: str = "jaccard",
+    embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
 ):
     """Load + normalize a preference dataset to columns prompt/chosen/rejected.
 
-    ``max_pair_similarity`` < 1 drops near-identical (low-contrast) chosen/rejected
-    pairs by token-Jaccard. HH-RLHF has many low-contrast pairs; dropping them raises
-    held-out RM accuracy, most so for small models (arXiv:2409.09603). Filtering runs
-    before ``max_samples`` so the cap is taken from the cleaned pool.
+    ``max_pair_similarity`` < 1 drops low-contrast chosen/rejected pairs. With
+    ``contrast_metric="jaccard"`` (cheap, lexical — weak on HH) it's token overlap;
+    with ``"embedding"`` it's mean-pooled MiniLM cosine (semantic; on HH use ~0.6).
+    Dropping low-contrast pairs can raise small-model RM accuracy (arXiv:2409.09603).
+    Filtering runs before ``max_samples`` so the cap is taken from the cleaned pool.
     """
     from datasets import load_dataset
 
     ds = load_dataset(name, split=split)
+    # Bound embedding cost by pre-capping to a pool ~3x the target before encoding.
+    if max_samples is not None and max_pair_similarity < 1.0 and contrast_metric == "embedding":
+        ds = ds.select(range(min(len(ds), max_samples * 3)))
+
     cols = set(ds.column_names)
     if {"chosen", "rejected"} <= cols and "prompt" not in cols:
         fn = _normalize_hh
@@ -101,11 +141,21 @@ def load_preference_dataset(
         )
     ds = ds.map(fn, remove_columns=ds.column_names, num_proc=num_proc)
     ds = ds.filter(lambda ex: len(ex["chosen"]) > 0 and len(ex["rejected"]) > 0)
+
     if max_pair_similarity < 1.0:
-        ds = ds.filter(
-            lambda ex: pair_similarity(ex["chosen"], ex["rejected"]) <= max_pair_similarity,
-            num_proc=num_proc,
-        )
+        if contrast_metric == "embedding":
+            try:
+                keep = _embedding_keep_mask(ds["chosen"], ds["rejected"], max_pair_similarity, embedding_model)
+                ds = ds.select([i for i, k in enumerate(keep) if k])
+                _log.info("embedding contrast filter kept %d/%d pairs (cosine<=%.2f)",
+                          len(ds), len(keep), max_pair_similarity)
+            except Exception as e:  # noqa: BLE001 — never let filtering break a run
+                _log.warning("embedding contrast filter failed (%s); skipping", e)
+        else:
+            ds = ds.filter(
+                lambda ex: pair_similarity(ex["chosen"], ex["rejected"]) <= max_pair_similarity,
+                num_proc=num_proc,
+            )
     if max_samples is not None:
         ds = ds.select(range(min(max_samples, len(ds))))
     return ds

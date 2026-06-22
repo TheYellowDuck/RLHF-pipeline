@@ -17,8 +17,11 @@ data:
   max_samples: null          # cap train examples (null = all)
   max_eval_samples: 1000
   max_length: 512
-  max_pair_similarity: 0.5   # drop near-DUPLICATE pairs (token-Jaccard, train only). Rare on HH
-                             # (lexically diverse); bites harder on datasets with low-contrast pairs.
+  max_pair_similarity: 0.5   # drop low-contrast pairs (train set only). Rare on HH with jaccard.
+  contrast_metric: jaccard   # "jaccard" (cheap; ~no-op on HH) | "embedding" (MiniLM cosine, semantic).
+                             #   embedding on HH: start ~0.7 and TUNE — the drop fraction is subset-dependent
+                             #   (cosine<=0.6 removed ~37% of the HH test split); too-low a threshold starves the RM.
+  embedding_model: sentence-transformers/all-MiniLM-L6-v2
 
 train:
   epochs: 1                  # try 2 — multi-epoch RMs can help (arXiv:2506.01937); costs ~2x time
