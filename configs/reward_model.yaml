@@ -23,8 +23,8 @@ data:
 train:
   epochs: 1                  # try 2 — multi-epoch RMs can help (arXiv:2506.01937); costs ~2x time
   batch_size: 8
-  grad_accum: 8              # effective batch ~64 (stabler RM; standard recipe uses 512)
-  lr: 5.0e-6                 # lower LR pairs with the larger effective batch
+  grad_accum: 1              # keep ~baseline step count; big-batch recipes need big data, not ~20k samples
+  lr: 1.0e-5                 # the value that converges on this budget; don't slash it
   weight_decay: 0.0
   warmup_ratio: 0.03
   max_grad_norm: 1.0
