@@ -235,9 +235,16 @@ python scripts/evaluate.py judge --policy checkpoints/ppo --base checkpoints/sft
 ### Train on Kaggle (free GPU)
 
 Open [notebooks/kaggle_rlhf.ipynb](notebooks/kaggle_rlhf.ipynb) on Kaggle (T4×2 / P100), enable
-the GPU + internet, and run top to bottom. It clones/copies this repo, runs SFT → RM → PPO, and
-scores the result. A full run with `pythia-160m` completes in roughly 1.5–2.5 hours, well inside
-Kaggle's 9-hour session limit.
+the GPU + internet, and **Save Version ▸ Save & Run All (Commit)**. It clones this repo, runs
+SFT → reward model (initialized from the SFT checkpoint) → PPO, and writes `RESULTS.md`
+(reward-model accuracy, PPO-vs-SFT win-rate, sample completions) to the output. The default
+`Qwen/Qwen2.5-0.5B` `full` run is ~3–5 h; `PRESET='fast'` is ~2 h. Free GPUs can be preempted
+(the run restarts), so prefer the short preset or split the stages across separate commits.
+
+**Headless via the Kaggle API (no browser):** with `pip install kaggle` and a token in
+`~/.kaggle/kaggle.json`, set your username in [kernel-metadata.json](kernel-metadata.json) and run
+[scripts/run_on_kaggle.sh](scripts/run_on_kaggle.sh) — it pushes the notebook, polls until done,
+and downloads `RESULTS.md` + checkpoints to `./kaggle_out`.
 
 ### License
 

@@ -23,3 +23,6 @@ data/cache/
 .claude/
 smoke.err.log
 cli.err.log
+
+# kaggle api outputs
+kaggle_out/

@@ -1,0 +1,13 @@
+{
+  "id": "YOUR_KAGGLE_USERNAME/rlhf-pipeline-run",
+  "title": "RLHF Pipeline Run",
+  "code_file": "notebooks/kaggle_rlhf.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": true,
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": []
+}
