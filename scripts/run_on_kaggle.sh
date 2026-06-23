@@ -34,7 +34,9 @@ print("kernel id ->", sys.argv[1])
 PY
 
 echo ">> pushing + starting headless GPU run: $ID"
-kaggle kernels push -p .
+# Force a T4 — the API default is NvidiaTeslaP100, and Kaggle's current base torch dropped P100
+# (sm_60) support. T4 (sm_75) works out of the box and is ~2x faster here. Override with $KAGGLE_ACC.
+kaggle kernels push -p . --accelerator "${KAGGLE_ACC:-NvidiaTeslaT4}"
 
 echo ">> polling status (Ctrl-C is safe; the run keeps going on Kaggle)"
 while true; do
