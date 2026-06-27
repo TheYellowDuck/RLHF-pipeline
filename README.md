@@ -241,6 +241,26 @@ python scripts/evaluate.py score-policy --policy checkpoints/ppo \
 # Independent LLM-as-judge win-rate (Claude), with position-bias control
 pip install anthropic && export ANTHROPIC_API_KEY=...
 python scripts/evaluate.py judge --policy checkpoints/ppo --base checkpoints/sft --num 100
+
+# Best-of-N: sample N per prompt, keep the reward model's top pick (inference-time alignment)
+python scripts/evaluate.py score-policy --policy checkpoints/ppo \
+    --reward-model checkpoints/reward_model --compare checkpoints/ppo --best-of-n 8 --num 200
+```
+
+### Chat with your model
+
+Talk to the trained policy — a real chat interface (CLI or browser) over the model this pipeline
+produced. Works with any local checkpoint or HF id. **Best-of-N** samples several replies per turn
+and returns the one the reward model scores highest — better answers at zero extra training cost.
+
+```bash
+# Terminal chat
+python scripts/chat.py --model checkpoints/ppo
+python scripts/chat.py --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
+
+# Browser UI (Gradio chat window at http://localhost:7860)
+pip install gradio
+python app.py --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
 ```
 
 ### Train on Kaggle (free GPU)

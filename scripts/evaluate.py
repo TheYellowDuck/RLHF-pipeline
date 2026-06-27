@@ -18,6 +18,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import torch
+
 from rlhf.algorithms import RewardTrainer
 from rlhf.data import load_preference_dataset, load_prompt_dataset
 from rlhf.models import ActorCriticPolicy, RewardModel, load_tokenizer
@@ -43,15 +45,33 @@ def score_policy(args, device, dtype):
     rm = RewardModel.from_pretrained(args.reward_model, dtype=dtype).to(device).eval()
     prompts = load_prompt_dataset(args.data, args.split, args.num)["prompt"]
 
-    def run(path):
+    def run(path, best_of_n=1):
         pol = ActorCriticPolicy.from_pretrained(path, dtype=dtype).to(device).eval()
-        resp = generate_responses(pol, tok, prompts, device, max_new_tokens=args.max_new_tokens,
-                                  do_sample=not args.greedy, temperature=args.temperature,
-                                  max_prompt_length=args.max_length // 2, batch_size=args.batch_size)
-        sc = score_texts(rm, tok, prompts, resp, device, max_length=args.max_length, batch_size=args.batch_size)
-        return resp, sc
 
-    resp, sc = run(args.policy)
+        def gen(sample):
+            return generate_responses(pol, tok, prompts, device, max_new_tokens=args.max_new_tokens,
+                                      do_sample=sample, temperature=args.temperature,
+                                      max_prompt_length=args.max_length // 2, batch_size=args.batch_size)
+
+        def sc_of(resp):
+            return score_texts(rm, tok, prompts, resp, device, max_length=args.max_length, batch_size=args.batch_size)
+
+        if best_of_n <= 1:
+            resp = gen(not args.greedy)
+            return resp, sc_of(resp)
+        # Best-of-N: sample N times, keep the reward model's top pick per prompt.
+        best_resp, best_sc = list(prompts), torch.full((len(prompts),), float("-inf"))
+        for _ in range(best_of_n):
+            r = gen(True)
+            s = sc_of(r)
+            for i in range(len(prompts)):
+                if s[i] > best_sc[i]:
+                    best_sc[i], best_resp[i] = s[i], r[i]
+        return best_resp, best_sc
+
+    resp, sc = run(args.policy, args.best_of_n)
+    if args.best_of_n > 1:
+        log.info("policy used Best-of-%d reranking by the reward model", args.best_of_n)
     log.info("policy %s: mean reward %.4f +/- %.4f over %d prompts",
              args.policy, sc.mean().item(), sc.std().item(), len(sc))
     for p, r, s in list(zip(prompts, resp, sc))[:3]:
@@ -110,6 +130,8 @@ def main():
     b.add_argument("--max-new-tokens", type=int, default=64)
     b.add_argument("--temperature", type=float, default=1.0)
     b.add_argument("--greedy", action="store_true")
+    b.add_argument("--best-of-n", type=int, default=1,
+                   help="sample N per prompt, keep the RM's best (inference-time alignment)")
 
     j = sub.add_parser("judge", parents=[shared], help="independent Claude-as-judge win-rate")
     j.add_argument("--policy", required=True)
