@@ -108,7 +108,9 @@ pairs via a known-buggy `overall_score` binarization. Training + evaluating on t
 `argilla/ultrafeedback-binarized-preferences-cleaned` set and initializing the RM from an instruct
 backbone lifted accuracy to **0.726 (+9.6 pts)** — while the *same* model drops to 0.59 on the noisy H4
 labels, which confirms the diagnosis (a more-correct model disagrees more with bad labels). PPO then
-optimizes the policy against this reward model. Full run: `notebooks/kaggle_rlhf_full.ipynb`.
+optimizes the Instruct policy against this reward model and **wins 56% of head-to-head comparisons vs
+the un-tuned policy** (mean reward −0.654 → −0.587), i.e. RL measurably moved the policy in the
+reward-increasing direction. Full run: `notebooks/kaggle_rlhf_full.ipynb`.
 
 ## Skills Demonstrated
 
