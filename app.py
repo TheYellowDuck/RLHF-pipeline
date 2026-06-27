@@ -1,11 +1,11 @@
 """Zero-dependency web chat UI for a trained RLHF policy.
 
-No extra packages — uses only Python's standard library plus this repo's deps.
+No extra packages — Python's standard library plus this repo's deps.
 
     python app.py --model checkpoints/ppo
     python app.py --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
 
-Then open http://localhost:7860 in your browser.
+Open http://localhost:7860 in your browser.
 """
 
 from __future__ import annotations
@@ -20,38 +20,89 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from rlhf.inference import ChatEngine
 
-PAGE = """<!doctype html><html><head><meta charset="utf-8"><title>RLHF chat</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
+PAGE = r"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RLHF Chat</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
- body{font:16px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;max-width:760px;margin:0 auto;padding:16px;background:#0f1115;color:#e6e6e6}
- h2{font-weight:600} .sub{color:#8a93a3;font-size:13px;margin-top:-10px}
- #log{margin:16px 0;min-height:50vh} .msg{padding:10px 14px;border-radius:12px;margin:8px 0;white-space:pre-wrap}
- .user{background:#1f6feb22;border:1px solid #1f6feb55} .bot{background:#1c1f26;border:1px solid #2b303b}
- .role{font-weight:600;font-size:12px;color:#8a93a3;margin-bottom:2px} .meta{color:#7d8590;font-size:12px}
- form{display:flex;gap:8px;position:sticky;bottom:0;background:#0f1115;padding:10px 0}
- input{flex:1;padding:12px;border-radius:10px;border:1px solid #2b303b;background:#161922;color:#e6e6e6;font-size:16px}
- button{padding:12px 18px;border:0;border-radius:10px;background:#1f6feb;color:#fff;font-weight:600;cursor:pointer}
- button:disabled{opacity:.5}
+:root{--bg:#0b0d12;--panel:#12151c;--panel2:#171b24;--border:#232936;--text:#e8eaed;--muted:#9aa4b2;
+--accent:#3b82f6;--user:#1c3a5e;--code:#0d1117}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:11px;padding:12px 18px;border-bottom:1px solid var(--border);
+background:var(--panel)}
+.dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 9px #22c55e}
+.title{font-weight:600}.mode{font-size:12px;color:var(--muted);background:var(--panel2);padding:3px 10px;
+border-radius:20px;border:1px solid var(--border)}.spacer{flex:1}
+header button{background:var(--panel2);border:1px solid var(--border);color:var(--text);padding:6px 12px;
+border-radius:8px;cursor:pointer;font-size:13px}header button:hover{background:var(--border)}
+#log{flex:1;overflow-y:auto;padding:22px 0}.wrap{max-width:768px;margin:0 auto;padding:0 18px}
+.row{display:flex;gap:12px;margin:18px 0;align-items:flex-start}.row.user{flex-direction:row-reverse}
+.avatar{width:30px;height:30px;border-radius:8px;flex:none;display:flex;align-items:center;justify-content:center;
+font-size:12px;font-weight:600}.user .avatar{background:#2563eb}.bot .avatar{background:#3a4250}
+.col{max-width:80%}.user .col{align-items:flex-end;display:flex;flex-direction:column}
+.bubble{padding:11px 15px;border-radius:14px;overflow-wrap:anywhere}
+.user .bubble{background:var(--user);border:1px solid #2a4a6b;border-top-right-radius:4px}
+.bot .bubble{background:var(--panel);border:1px solid var(--border);border-top-left-radius:4px}
+.bubble p{margin:0 0 9px}.bubble p:last-child{margin:0}
+.bubble pre{background:var(--code);border:1px solid var(--border);border-radius:8px;padding:12px;overflow-x:auto;margin:9px 0}
+.bubble code{background:#ffffff14;padding:2px 5px;border-radius:4px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+.bubble pre code{background:none;padding:0}.bubble ul,.bubble ol{margin:6px 0;padding-left:22px}
+.badge{display:inline-block;font-size:11px;color:#a7f3d0;background:#064e3b;border:1px solid #066249;
+padding:2px 9px;border-radius:20px;margin-top:7px}
+.typing span{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--muted);margin:0 2px;
+animation:b 1.2s infinite}.typing span:nth-child(2){animation-delay:.2s}.typing span:nth-child(3){animation-delay:.4s}
+@keyframes b{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+footer{border-top:1px solid var(--border);background:var(--panel);padding:12px 0}
+.inputbar{max-width:768px;margin:0 auto;padding:0 18px;display:flex;gap:10px;align-items:flex-end}
+textarea{flex:1;resize:none;background:var(--panel2);border:1px solid var(--border);border-radius:12px;
+color:var(--text);padding:12px 14px;font:inherit;max-height:170px;outline:none}
+textarea:focus{border-color:var(--accent)}
+.send{background:var(--accent);border:0;color:#fff;width:44px;height:44px;border-radius:12px;cursor:pointer;
+font-size:18px;flex:none}.send:disabled{opacity:.45;cursor:default}
+.hint{max-width:768px;margin:7px auto 0;padding:0 18px;font-size:11px;color:var(--muted)}
+.empty{text-align:center;color:var(--muted);margin-top:13vh}.empty h1{font-size:23px;color:var(--text);font-weight:600;margin:0 0 6px}
 </style></head><body>
-<h2 id="title">RLHF chat</h2><div class="sub" id="sub"></div>
-<div id="log"></div>
-<form id="f"><input id="m" autocomplete="off" placeholder="Type a message…" autofocus>
-<button id="b">Send</button></form>
+<header><span class="dot"></span><span class="title" id="title">RLHF Chat</span>
+<span class="mode" id="mode"></span><span class="spacer"></span>
+<button onclick="reset()">＋ New chat</button></header>
+<div id="log"><div class="wrap" id="wrap"></div></div>
+<footer><div class="inputbar">
+<textarea id="m" rows="1" placeholder="Message your model…" autofocus></textarea>
+<button class="send" id="send" title="Send">↑</button></div>
+<div class="hint">Enter to send · Shift+Enter for newline · runs locally on your machine</div></footer>
 <script>
-const hist=[], log=document.getElementById('log'), inp=document.getElementById('m'), btn=document.getElementById('b');
+const log=document.getElementById('log'),wrap=document.getElementById('wrap'),ta=document.getElementById('m'),send=document.getElementById('send');
+let hist=[],busy=false;
 const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-function add(role,text,meta){const d=document.createElement('div');d.className='msg '+role;
- d.innerHTML='<div class=role>'+(role==='user'?'you':'bot')+'</div>'+esc(text)+(meta?'<div class=meta>'+esc(meta)+'</div>':'');
- log.appendChild(d);window.scrollTo(0,document.body.scrollHeight);return d;}
-fetch('/info').then(r=>r.json()).then(j=>{document.getElementById('title').textContent='RLHF chat — '+j.model;
- document.getElementById('sub').textContent=j.mode;});
-document.getElementById('f').onsubmit=async e=>{e.preventDefault();const text=inp.value.trim();if(!text)return;
- inp.value='';btn.disabled=true;add('user',text);hist.push({role:'user',content:text});
- const t=add('bot','thinking…');
+function md(t){t=esc(t);
+ t=t.replace(/```([\s\S]*?)```/g,(m,c)=>'<pre><code>'+c.replace(/^\n/,'')+'</code></pre>');
+ t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+ t=t.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+ let out=[],ul=false;
+ for(const ln of t.split('\n')){
+  if(/^\s*[-*]\s+/.test(ln)){if(!ul){out.push('<ul>');ul=true;}out.push('<li>'+ln.replace(/^\s*[-*]\s+/,'')+'</li>');}
+  else{if(ul){out.push('</ul>');ul=false;}out.push(ln);}}
+ if(ul)out.push('</ul>');
+ return out.join('\n').split(/\n{2,}/).map(b=>/^\s*<(pre|ul|ol)/.test(b)?b:'<p>'+b.replace(/\n/g,'<br>')+'</p>').join('');
+}
+function showEmpty(){wrap.innerHTML='<div class="empty"><h1>Chat with your model</h1><p>Trained with this repo&#39;s SFT &rarr; reward-model &rarr; PPO pipeline.</p></div>';}
+function bubble(role,html,meta){const e=wrap.querySelector('.empty');if(e)e.remove();
+ const row=document.createElement('div');row.className='row '+role;
+ row.innerHTML='<div class="avatar">'+(role==='user'?'You':'AI')+'</div><div class="col"><div class="bubble">'+html+'</div>'+(meta?'<div class="badge">'+esc(meta)+'</div>':'')+'</div>';
+ wrap.appendChild(row);log.scrollTop=log.scrollHeight;return row;}
+async function submit(){const text=ta.value.trim();if(!text||busy)return;busy=true;send.disabled=true;
+ ta.value='';ta.style.height='auto';bubble('user',md(text));hist.push({role:'user',content:text});
+ const t=bubble('bot','<div class="typing"><span></span><span></span><span></span></div>');
  try{const r=await fetch('/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:hist})});
-  const j=await r.json();t.remove();add('bot',j.reply,j.info);hist.push({role:'assistant',content:j.reply});}
- catch(err){t.remove();add('bot','[error] '+err);}
- btn.disabled=false;inp.focus();};
+  const j=await r.json();t.remove();bubble('bot',md(j.reply),j.info||null);hist.push({role:'assistant',content:j.reply});}
+ catch(err){t.remove();bubble('bot','<i>error: '+esc(''+err)+'</i>');}
+ busy=false;send.disabled=false;ta.focus();}
+function reset(){hist=[];showEmpty();ta.focus();}
+send.onclick=submit;
+ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();}});
+ta.addEventListener('input',()=>{ta.style.height='auto';ta.style.height=Math.min(170,ta.scrollHeight)+'px';});
+fetch('/info').then(r=>r.json()).then(j=>{document.getElementById('title').textContent=j.model.split('/').pop();document.getElementById('mode').textContent=j.mode;});
+showEmpty();
 </script></body></html>"""
 
 
@@ -112,7 +163,7 @@ def main():
     Handler.system = args.system
     Handler.gen = dict(max_new_tokens=args.max_new_tokens, temperature=args.temperature)
     Handler.title = args.model
-    Handler.mode = (f"Best-of-{args.best_of_n} (reward-model reranked) · {Handler.engine.device}"
+    Handler.mode = (f"Best-of-{args.best_of_n} · reward-model reranked · {Handler.engine.device}"
                     if Handler.engine.rm else f"single-sample · {Handler.engine.device}")
 
     srv = ThreadingHTTPServer(("127.0.0.1", args.port), Handler)
