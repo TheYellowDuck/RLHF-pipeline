@@ -3,6 +3,7 @@ from .loading import (
     load_causal_lm,
     load_base_model,
     apply_lora,
+    merge_if_peft,
 )
 from .value_head import ValueHead
 from .reward_model import RewardModel, last_token_indices
@@ -13,6 +14,7 @@ __all__ = [
     "load_causal_lm",
     "load_base_model",
     "apply_lora",
+    "merge_if_peft",
     "ValueHead",
     "RewardModel",
     "last_token_indices",

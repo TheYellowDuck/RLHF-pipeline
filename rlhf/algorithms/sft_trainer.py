@@ -84,7 +84,7 @@ class SFTTrainer:
         if acc_is_main(self.acc):
             if eval_ds is not None:
                 self._run_eval(eval_ds)
-            self.save(self.cfg.output_dir)
+            self.save(self.cfg.output_dir, merge=True)
         return self.model
 
     @torch.no_grad()
@@ -106,7 +106,9 @@ class SFTTrainer:
         if self.metrics: self.metrics.log_metrics(m, self.global_step, prefix="sft")
         else: self.log.info("eval %s", m)
 
-    def save(self, path):
-        acc_unwrap(self.acc, self.model).save_pretrained(path)
+    def save(self, path, merge=False):
+        from ..models import merge_if_peft
+        model = acc_unwrap(self.acc, self.model)
+        (merge_if_peft(model) if merge else model).save_pretrained(path)
         save_tokenizer(self.tokenizer, path)
-        self.log.info("saved SFT model -> %s", path)
+        self.log.info("saved SFT model -> %s%s", path, " (LoRA merged)" if merge else "")

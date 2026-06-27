@@ -112,7 +112,7 @@ class RewardTrainer:
         if acc_is_main(self.acc):
             if eval_ds is not None:
                 self._run_eval(eval_ds)
-            self.save(self.cfg.output_dir)
+            self.save(self.cfg.output_dir, merge=True)
         return self.model
 
     @torch.no_grad()
@@ -139,7 +139,7 @@ class RewardTrainer:
         if self.metrics: self.metrics.log_metrics(m, self.global_step, prefix="rm")
         else: self.log.info("eval %s", m)
 
-    def save(self, path: str):
-        acc_unwrap(self.acc, self.model).save_pretrained(path)
+    def save(self, path: str, merge: bool = False):
+        acc_unwrap(self.acc, self.model).save_pretrained(path, merge=merge)
         save_tokenizer(self.tokenizer, path)
-        self.log.info("saved reward model -> %s", path)
+        self.log.info("saved reward model -> %s%s", path, " (LoRA merged)" if merge else "")

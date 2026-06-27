@@ -8,7 +8,7 @@ import os
 import torch
 import torch.nn as nn
 
-from .loading import apply_lora, load_base_model
+from .loading import apply_lora, load_base_model, merge_if_peft
 from .value_head import ValueHead
 
 _CONFIG_NAME = "reward_config.json"
@@ -78,9 +78,10 @@ class RewardModel(nn.Module):
         if hasattr(self.backbone, "enable_input_require_grads"):
             self.backbone.enable_input_require_grads()
 
-    def save_pretrained(self, path: str):
+    def save_pretrained(self, path: str, merge: bool = False):
         os.makedirs(path, exist_ok=True)
-        self.backbone.save_pretrained(path)
+        backbone = merge_if_peft(self.backbone) if merge else self.backbone
+        backbone.save_pretrained(path)
         torch.save(self.value_head.state_dict(), os.path.join(path, _HEAD_NAME))
         with open(os.path.join(path, _CONFIG_NAME), "w") as f:
             json.dump({"hidden_size": self.value_head.proj.in_features}, f)

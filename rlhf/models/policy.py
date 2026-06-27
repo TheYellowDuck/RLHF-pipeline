@@ -14,7 +14,7 @@ from contextlib import contextmanager
 import torch
 import torch.nn as nn
 
-from .loading import apply_lora, load_causal_lm
+from .loading import apply_lora, load_causal_lm, merge_if_peft
 from .value_head import ValueHead
 
 _HEAD_NAME = "value_head.pt"
@@ -83,12 +83,14 @@ class ActorCriticPolicy(nn.Module):
             lm = apply_lora(lm, lora_cfg or {}, task_type="CAUSAL_LM")
         return cls(lm, hidden_size, is_peft=use_lora)
 
-    def save_pretrained(self, path: str):
+    def save_pretrained(self, path: str, merge: bool = False):
         os.makedirs(path, exist_ok=True)
-        self.lm.save_pretrained(path)  # full weights, or adapter if peft
+        lm = merge_if_peft(self.lm) if merge else self.lm  # merge -> full model on final save
+        lm.save_pretrained(path)  # full weights, or adapter if peft and not merged
+        is_peft = self.is_peft and not merge
         torch.save(self.value_head.state_dict(), os.path.join(path, _HEAD_NAME))
         with open(os.path.join(path, _CONFIG_NAME), "w") as f:
-            json.dump({"hidden_size": self.value_head.proj.in_features, "is_peft": self.is_peft}, f)
+            json.dump({"hidden_size": self.value_head.proj.in_features, "is_peft": is_peft}, f)
 
     @classmethod
     def from_pretrained(cls, path: str, dtype: torch.dtype = torch.float32) -> "ActorCriticPolicy":

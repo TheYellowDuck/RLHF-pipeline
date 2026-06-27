@@ -304,11 +304,11 @@ class PPOTrainer:
                         self.log.info("iter %d %s", self.global_step, m)
                 if self.global_step % pc.get("save_every", 50) == 0:
                     self.save(self.cfg.output_dir)
-        self.save(self.cfg.output_dir)
+        self.save(self.cfg.output_dir, merge=True)
         return self.policy
 
-    def save(self, path):
-        self.policy.save_pretrained(path)
+    def save(self, path, merge=False):
+        self.policy.save_pretrained(path, merge=merge)
         save_tokenizer(self.tokenizer, path)
         state = {"optimizer": self.opt.state_dict(), "global_step": self.global_step,
                  "kl_coef": self.kl_ctl.value}

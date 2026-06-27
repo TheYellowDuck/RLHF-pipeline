@@ -39,6 +39,20 @@ def load_base_model(name_or_path: str, dtype: torch.dtype = torch.float32, **kwa
     return _from_pretrained(AutoModel, name_or_path, dtype, **kwargs)
 
 
+def merge_if_peft(model):
+    """If `model` is a LoRA ``PeftModel``, merge the adapter into the base weights and return the
+    resulting full model — so the checkpoint loads later as an ordinary model (no adapter shuffling,
+    and a reward trunk can read it). No-op for non-LoRA models.
+
+    Destructive (drops the adapter): call ONLY on a stage's FINAL save, never on intermediate /
+    resume checkpoints where training continues.
+    """
+    if hasattr(model, "merge_and_unload"):
+        _log.info("merging LoRA adapter into base weights for the final checkpoint")
+        return model.merge_and_unload()
+    return model
+
+
 def apply_lora(model, lora_cfg, task_type: str = "CAUSAL_LM"):
     """Wrap a model with a LoRA adapter. ``target_modules=None`` -> all linear layers."""
     from peft import LoraConfig, get_peft_model
