@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Launch the browser chat UI. Uses the project's virtualenv automatically.
+#   ./ui                                    # then open http://localhost:7860
+#   ./ui --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
+cd "$(dirname "$0")"
+PY="./.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+exec "$PY" app.py "$@"

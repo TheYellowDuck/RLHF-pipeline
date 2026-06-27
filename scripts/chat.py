@@ -39,6 +39,7 @@ def main():
     p.add_argument("--once", default=None, help="send one message, print the reply, exit (non-interactive)")
     args = p.parse_args()
 
+    print(f"Loading '{args.model}' (first run downloads ~1 GB; ~20–40 s)…", flush=True)
     engine = ChatEngine(args.model, reward_model=args.reward_model, best_of_n=args.best_of_n,
                         device=args.device, dtype=args.dtype)
     gen = dict(max_new_tokens=args.max_new_tokens, temperature=args.temperature,
@@ -59,7 +60,9 @@ def main():
         return
 
     mode = f"best-of-{args.best_of_n} (RM rerank)" if engine.rm else "single-sample"
-    print(f"Chatting with `{args.model}` on {engine.device} — {mode}. /reset to clear, /quit to exit.")
+    slow = str(engine.device) == "cpu"
+    print(f"Chatting with `{args.model}` on {engine.device} — {mode}. /reset to clear, /quit to exit."
+          + ("\n(on CPU each reply takes ~20–40 s — it's working, not frozen.)" if slow else ""))
     while True:
         try:
             user = input("\nyou> ").strip()

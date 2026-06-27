@@ -17,5 +17,6 @@ tensorboard
 # Optional extras (install as needed):
 #   anthropic   # LLM-as-judge eval:  scripts/evaluate.py judge
 #   vllm        # fast PPO/GRPO rollouts (GPU only):  -o ppo.use_vllm=true
-
-gradio          # optional: browser chat UI (app.py) only
+#
+# The chat CLI (scripts/chat.py / ./chat) and web UI (app.py / ./ui) need NO extra
+# packages beyond Core above — the UI uses Python's stdlib http.server.

@@ -29,6 +29,19 @@ from rlhf.utils.generation import generate_responses, score_texts
 log = get_logger("rlhf.eval")
 
 
+def load_dotenv(path=".env"):
+    """Zero-dependency .env loader — populate os.environ from a local .env if present."""
+    if not os.path.exists(path):
+        return
+    for raw in open(path):
+        line = raw.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            v = v.strip().strip('"').strip("'")
+            if v:
+                os.environ.setdefault(k.strip(), v)
+
+
 def rm_accuracy(args, device, dtype):
     tok = load_tokenizer(args.reward_model)
     rm = RewardModel.from_pretrained(args.reward_model, dtype=dtype)
@@ -145,6 +158,7 @@ def main():
     j.add_argument("--no-swap", action="store_true", help="disable position-bias swap")
 
     args = p.parse_args()
+    load_dotenv()  # pick up ANTHROPIC_API_KEY etc. from a local .env
     device = resolve_device(args.device)
     dtype = resolve_dtype(args.dtype, device)
     if args.mode == "rm-accuracy":

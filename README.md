@@ -254,14 +254,16 @@ produced. Works with any local checkpoint or HF id. **Best-of-N** samples severa
 and returns the one the reward model scores highest — better answers at zero extra training cost.
 
 ```bash
-# Terminal chat
-python scripts/chat.py --model checkpoints/ppo
-python scripts/chat.py --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
+# Terminal chat — the ./chat launcher auto-selects the project venv (no "module not found")
+./chat                                    # chat with the default model
+./chat --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
 
-# Browser UI (Gradio chat window at http://localhost:7860)
-pip install gradio
-python app.py --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
+# Browser UI — NO extra installs (stdlib http.server). Opens http://localhost:7860
+./ui --model checkpoints/ppo --best-of-n 8 --reward-model checkpoints/reward_model
 ```
+
+> Run these from the repo root. They use the `.venv` created in *Install* above — if you see
+> `ModuleNotFoundError`, you're using system Python; `./chat` / `./ui` avoid that automatically.
 
 ### Train on Kaggle (free GPU)
 

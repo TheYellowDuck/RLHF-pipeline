@@ -17,6 +17,10 @@ wandb/
 data/cache/
 .cache/
 
+# secrets (API keys etc.) — never commit; copy .env.example -> .env and fill in
+.env
+.env.local
+
 # misc
 .DS_Store
 *.log

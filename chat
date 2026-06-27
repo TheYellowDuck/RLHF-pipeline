@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Chat with the trained model in your terminal. Uses the project's virtualenv automatically.
+#   ./chat                                  # chat with the default model
+#   ./chat --model checkpoints/ppo          # chat with your trained policy
+#   ./chat --best-of-n 8 --reward-model checkpoints/reward_model
+cd "$(dirname "$0")"
+PY="./.venv/bin/python"
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+exec "$PY" scripts/chat.py "$@"
