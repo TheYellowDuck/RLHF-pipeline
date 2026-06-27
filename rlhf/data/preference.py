@@ -121,26 +121,40 @@ def load_preference_dataset(
     Dropping low-contrast pairs can raise small-model RM accuracy (arXiv:2409.09603).
     Filtering runs before ``max_samples`` so the cap is taken from the cleaned pool.
     """
-    from datasets import load_dataset
+    from datasets import concatenate_datasets, load_dataset
 
-    ds = load_dataset(name, split=split)
+    def _load_normalized(nm, sp):
+        d = load_dataset(nm, split=sp)
+        cols = set(d.column_names)
+        if {"chosen", "rejected"} <= cols and "prompt" not in cols:
+            fn = _normalize_hh
+        elif {"prompt", "chosen", "rejected"} <= cols:
+            # message-list format (e.g. UltraFeedback) vs plain strings (e.g. rm-static)
+            fn = _normalize_messages if isinstance(d[0]["chosen"], list) else _normalize_explicit
+        else:
+            raise ValueError(
+                f"Dataset '{nm}' has columns {sorted(cols)}; expected HH-style "
+                "(chosen/rejected), explicit (prompt/chosen/rejected), or chat-message lists."
+            )
+        d = d.map(fn, remove_columns=d.column_names, num_proc=num_proc)
+        return d.filter(lambda ex: len(ex["chosen"]) > 0 and len(ex["rejected"]) > 0)
+
+    # `name` may be a comma-separated MIX of sources, each optionally "name:split"
+    # (data curation/mixing — e.g. cleaned UltraFeedback + Skywork-Reward-80K).
+    parts = []
+    for spec in str(name).split(","):
+        spec = spec.strip()
+        if not spec:
+            continue
+        nm, _, sp = spec.partition(":")
+        parts.append(_load_normalized(nm.strip(), sp.strip() or split))
+    ds = parts[0] if len(parts) == 1 else concatenate_datasets(parts)
+    if len(parts) > 1:
+        _log.info("mixed %d preference sources -> %d pairs", len(parts), len(ds))
+
     # Bound embedding cost by pre-capping to a pool ~3x the target before encoding.
     if max_samples is not None and max_pair_similarity < 1.0 and contrast_metric == "embedding":
         ds = ds.select(range(min(len(ds), max_samples * 3)))
-
-    cols = set(ds.column_names)
-    if {"chosen", "rejected"} <= cols and "prompt" not in cols:
-        fn = _normalize_hh
-    elif {"prompt", "chosen", "rejected"} <= cols:
-        # message-list format (e.g. UltraFeedback) vs plain strings (e.g. rm-static)
-        fn = _normalize_messages if isinstance(ds[0]["chosen"], list) else _normalize_explicit
-    else:
-        raise ValueError(
-            f"Dataset '{name}' has columns {sorted(cols)}; expected HH-style "
-            "(chosen/rejected), explicit (prompt/chosen/rejected), or chat-message lists."
-        )
-    ds = ds.map(fn, remove_columns=ds.column_names, num_proc=num_proc)
-    ds = ds.filter(lambda ex: len(ex["chosen"]) > 0 and len(ex["rejected"]) > 0)
 
     if max_pair_similarity < 1.0:
         if contrast_metric == "embedding":
