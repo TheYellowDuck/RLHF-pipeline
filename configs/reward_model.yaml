@@ -10,8 +10,15 @@ model:
   lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
 
 data:
-  name: Anthropic/hh-rlhf    # preference dataset; also supports UltraFeedback (cleaner):
-                             #   -o data.name=HuggingFaceH4/ultrafeedback_binarized -o data.train_split=train_prefs -o data.eval_split=test_prefs
+  name: Anthropic/hh-rlhf    # preference dataset. BEST recipe (validated 0.726 held-out, vs a ~0.63 wall on
+                             # HH and on H4-UltraFeedback): init the RM from an INSTRUCT model and train+eval
+                             # on CLEANED UltraFeedback —
+                             #   -o model.name_or_path=Qwen/Qwen2.5-0.5B-Instruct \
+                             #   -o data.name=argilla/ultrafeedback-binarized-preferences-cleaned \
+                             #   -o data.train_split='train[2000:]' -o data.eval_split='train[:2000]'
+                             # Why: HuggingFaceH4/ultrafeedback_binarized mislabels ~50% of pairs (buggy
+                             # overall_score binarization) — that label noise, not model capacity, caps
+                             # accuracy at ~0.63. See notebooks/kaggle_rlhf_full.ipynb for the full run.
   train_split: train
   eval_split: test
   max_samples: null          # cap train examples (null = all)

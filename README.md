@@ -98,8 +98,17 @@ undefined names across every branch). Reward-model accuracy parsing was verified
 
 This is an educational, faithful single-GPU reproduction of the algorithms, not a
 throughput-optimized training stack: it does not include FSDP/ZeRO sharding or a fully verified
-distributed-rollout path, and the headline results from a full GPU training run on Kaggle are
-being added.
+distributed-rollout path.
+
+**Headline GPU result (Qwen2.5-0.5B, free Kaggle T4).** The reward model reaches **0.726**
+held-out preference accuracy on cleaned UltraFeedback — and getting there was a diagnosis, not just
+a bigger run. Accuracy was stuck at ~0.63 regardless of epochs/label-smoothing/filtering; I traced
+the ceiling to *label noise*, not capacity: `HuggingFaceH4/ultrafeedback_binarized` mislabels ~50% of
+pairs via a known-buggy `overall_score` binarization. Training + evaluating on the re-binarized
+`argilla/ultrafeedback-binarized-preferences-cleaned` set and initializing the RM from an instruct
+backbone lifted accuracy to **0.726 (+9.6 pts)** — while the *same* model drops to 0.59 on the noisy H4
+labels, which confirms the diagnosis (a more-correct model disagrees more with bad labels). PPO then
+optimizes the policy against this reward model. Full run: `notebooks/kaggle_rlhf_full.ipynb`.
 
 ## Skills Demonstrated
 
