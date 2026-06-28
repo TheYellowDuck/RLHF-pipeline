@@ -57,6 +57,23 @@ via its `reward_config.json` marker, asserts non-empty weights, runs the PPO rec
 win-rate → RESULTS.md). The ONLY manual step left is creating the RM Dataset (next bullet); then push
 with that dataset attached (`+ Add Input`, or add its slug to `kernel-metadata.json` `dataset_sources`)
 on a forced T4.
+
+**Getting the 0.8025 RM into a Dataset (Option A — the cheap path).** There is **no API/CLI way to pull a
+specific *old* kernel version's output** (`kaggle kernels output` only serves the LATEST version — open
+feature request, issue #442). The 0.8025 RM is v14; the kernel moved on to v15, so v14 is **UI-only**:
+1. Kaggle UI → the `rlhf-pipeline-run` kernel → pick **version 14** → *Output* → **Download** the
+   `checkpoints/reward_model/` folder (browser download is reliable; the CLI partial-download bug doesn't apply).
+2. `scripts/make_rm_dataset.sh <that-folder>` — drills to the `reward_config.json` dir, sanity-checks the
+   weights are non-empty, writes `dataset-metadata.json`, and runs `kaggle datasets create` →
+   `georgezhang06/rlhf-rm-1p5b-08025`. The script then prints the exact PPO-launch commands.
+3. The PPO notebook needs no change (it globs `/kaggle/input/**/reward_config.json`, so a `dataset_sources`
+   OR a `kernel_sources` mount both work). Launch on a **new kernel id** (`rlhf-ppo-1p5b`) so it never
+   buries another output again — the root cause of this whole detour was reusing one kernel id.
+
+**Partial-download workaround** (for whenever you DO pull a *latest* output and big files come back 0-byte):
+`kaggle kernels output <kernel> -p out/ --page-size 200 --file-pattern 'reward_model' -o` and retry; the
+`-o` re-fetches, the pattern skips unrelated files, and page-size 200 avoids pagination drops.
+
 The 0.8025 RM is done (Kaggle v14 output). To get a **1.5B policy**, run PPO reusing it:
 - Get the 0.8025 RM into a Kaggle **Dataset** (the kernel output's `checkpoints/reward_model/` —
   local downloads are partial, so add it via the Kaggle UI "New Dataset → from kernel output", or
