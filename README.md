@@ -107,10 +107,12 @@ the ceiling to *label noise*, not capacity: `HuggingFaceH4/ultrafeedback_binariz
 pairs via a known-buggy `overall_score` binarization. Training + evaluating on the re-binarized
 `argilla/ultrafeedback-binarized-preferences-cleaned` set and initializing the RM from an instruct
 backbone lifted accuracy to **0.726 (+9.6 pts)** — while the *same* model drops to 0.59 on the noisy H4
-labels, which confirms the diagnosis (a more-correct model disagrees more with bad labels). PPO then
-optimizes the Instruct policy against this reward model and **wins 56% of head-to-head comparisons vs
-the un-tuned policy** (mean reward −0.654 → −0.587), i.e. RL measurably moved the policy in the
-reward-increasing direction. Full run: `notebooks/kaggle_rlhf_full.ipynb`.
+labels, which confirms the diagnosis (a more-correct model disagrees more with bad labels). Scaling the
+backbone to **Qwen2.5-1.5B** (LoRA, on the same free T4) lifts cleaned-held-out accuracy to **0.8025**
+— so the full arc is **0.63 (buggy data) → 0.726 (clean data) → 0.8025 (1.5B)**, ~+17 points, every
+step a diagnosis rather than luck. PPO then optimizes the Instruct policy against the reward model and
+**wins 56% of head-to-head comparisons vs the un-tuned policy** (mean reward −0.654 → −0.587), i.e. RL
+measurably moved the policy in the reward-increasing direction. Full run: `notebooks/kaggle_rlhf_full.ipynb`.
 
 ## Skills Demonstrated
 
