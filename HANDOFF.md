@@ -21,6 +21,10 @@ polling it; on COMPLETE it pulls RESULTS.md, reports RM acc + win-rate, then run
 If you're resuming and this run is already COMPLETE, just `kaggle kernels output` it — don't relaunch.
 Remote: `TheYellowDuck/RLHF-pipeline`.
 
+**LOCAL-ONLY commits (not pushed):** the GRM lever (#4) and `notebooks/kaggle_ppo_1.5b.ipynb` (#3) are
+committed to local `main` but NOT pushed. The Kaggle notebooks `git clone` from GitHub, so **`git push`
+first** before launching #3 or a GRM run (the running #2 job cloned earlier, so it is unaffected).
+
 ## Reality check on time (READ THIS)
 A 1.5B RM on a free T4 with the OOM-safe config (batch 4 + gradient checkpointing) takes **~9 h** for
 4000 pairs. So a **full 1.5B RM+PPO in one 12 h session is NOT feasible** — it must be staged, or use
