@@ -15,7 +15,11 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
 - **PPO (0.5B)**: 56% win-rate vs the un-tuned Instruct policy, RM-judged (mean reward −0.654 → −0.587).
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
-No active Kaggle runs. Remote: `TheYellowDuck/RLHF-pipeline`.
+**ACTIVE RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
+0.5B pipeline (cleaned-data RM → PPO → eval, forced T4), launched and RUNNING. A ~30-min heartbeat is
+polling it; on COMPLETE it pulls RESULTS.md, reports RM acc + win-rate, then runs #1 (judge-validate).
+If you're resuming and this run is already COMPLETE, just `kaggle kernels output` it — don't relaunch.
+Remote: `TheYellowDuck/RLHF-pipeline`.
 
 ## Reality check on time (READ THIS)
 A 1.5B RM on a free T4 with the OOM-safe config (batch 4 + gradient checkpointing) takes **~9 h** for
