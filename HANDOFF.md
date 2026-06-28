@@ -48,6 +48,11 @@ python3 -c "import json;m=json.load(open('kernel-metadata.json'));m['code_file']
 Arm a heartbeat (~30-min). On COMPLETE → report RM acc + win-rate; download checkpoints → run #1 (judge).
 
 ### 3. STRETCH — full 1.5B policy (staged; the absolute cleanest, but more work)
+**Notebook now exists: `notebooks/kaggle_ppo_1.5b.ipynb`** (auto-discovers the RM under `/kaggle/input`
+via its `reward_config.json` marker, asserts non-empty weights, runs the PPO recipe below + RM-judged
+win-rate → RESULTS.md). The ONLY manual step left is creating the RM Dataset (next bullet); then push
+with that dataset attached (`+ Add Input`, or add its slug to `kernel-metadata.json` `dataset_sources`)
+on a forced T4.
 The 0.8025 RM is done (Kaggle v14 output). To get a **1.5B policy**, run PPO reusing it:
 - Get the 0.8025 RM into a Kaggle **Dataset** (the kernel output's `checkpoints/reward_model/` —
   local downloads are partial, so add it via the Kaggle UI "New Dataset → from kernel output", or
