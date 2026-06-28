@@ -118,6 +118,43 @@ def learning_check(tok):
     print(f"  RM learned: chosen>rejected accuracy {acc:.2f}")
 
 
+def aux_lm_check(tok):
+    """GRM aux-LM mode: (1) the reward must be numerically identical with/without the LM head
+    (hidden_states[-1] == last_hidden_state), and (2) the auxiliary LM loss path must still
+    learn the separable last-token signal — i.e. the regularizer doesn't break BT training."""
+    banner("aux-LM (GRM) check: reward unchanged + aux loss trains")
+    set_seed(0)
+    trunk = RewardModel.from_backbone(MODEL, dtype=torch.float32).eval()
+    grm = RewardModel.from_backbone(MODEL, dtype=torch.float32, aux_lm=True).eval()
+    grm.value_head.load_state_dict(trunk.value_head.state_dict())  # same head -> compare the trunks
+    enc = tok(["the quick brown fox", "hello there"], return_tensors="pt", padding=True)
+    with torch.no_grad():
+        r_trunk = trunk(enc["input_ids"], enc["attention_mask"])
+        r_grm = grm(enc["input_ids"], enc["attention_mask"])
+    delta = (r_trunk - r_grm).abs().max().item()
+    assert delta < 1e-4, f"GRM reward diverged from trunk-only (max Δ={delta:.2e})"
+    print(f"  reward identical with/without LM head (max Δ={delta:.2e})")
+
+    prompt = "\n\nHuman: Which answer is better?\n\nAssistant:"
+    ds = preference_dataset_from_pairs([(prompt, " good", " bad")] * 16)
+    rm = RewardModel.from_backbone(MODEL, dtype=torch.float32, aux_lm=True)
+    cfg = Config(dict(output_dir=f"{OUT}/rm_grm", data=dict(max_length=32),
+                      train=dict(epochs=15, batch_size=8, grad_accum=1, lr=5e-3, weight_decay=0.0,
+                                 warmup_ratio=0.0, max_grad_norm=1.0, bf16=False, aux_lm_coef=0.05,
+                                 log_every=1000, eval_every=10000, save_every=10000)))
+    trainer = RewardTrainer(rm, tok, cfg, DEVICE)
+    trainer.train(ds)
+    check_finite(rm, "GRM RM train")
+    acc = trainer.evaluate(ds)["eval_accuracy"]
+    assert acc > 0.9, f"aux-LM reward model failed to learn a separable signal (acc={acc:.2f})"
+    print(f"  aux-LM RM learned: chosen>rejected accuracy {acc:.2f}")
+    # the saved GRM checkpoint must reload as a trunk-only RM (what PPO/eval use downstream)
+    reloaded = RewardModel.from_pretrained(f"{OUT}/rm_grm", dtype=torch.float32)
+    acc2 = RewardTrainer(reloaded, tok, cfg, DEVICE).evaluate(ds)["eval_accuracy"]
+    assert acc2 > 0.9, f"reloaded aux-LM RM lost its signal (acc={acc2:.2f})"
+    print(f"  reload as trunk-only RM OK; eval accuracy {acc2:.2f}")
+
+
 def main():
     set_seed(0)
     prompts, pref, sft = synthetic()
@@ -203,6 +240,7 @@ def main():
 
     learning_check(tok)
     ppo_learning_check(tok)
+    aux_lm_check(tok)
 
     # ---- bonus: accelerate path (single-process CPU) ---------------------
     banner("bonus: accelerate path (single-process)")

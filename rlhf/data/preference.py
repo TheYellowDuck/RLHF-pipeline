@@ -212,10 +212,14 @@ class PreferenceCollator:
 
     tokenizer: object
     max_length: int = 512
+    emit_loss_mask: bool = False   # also emit chosen_loss_mask (response-only) for the GRM aux LM loss
 
     def _encode(self, prompt: str, response: str) -> list[int]:
         ids = self.tokenizer(prompt + response, add_special_tokens=False)["input_ids"]
         return ids[: self.max_length]
+
+    def _prompt_len(self, prompt: str) -> int:
+        return len(self.tokenizer(prompt, add_special_tokens=False)["input_ids"])
 
     def __call__(self, batch: list[dict]) -> dict:
         pad_id = self.tokenizer.pad_token_id
@@ -223,12 +227,22 @@ class PreferenceCollator:
         rejected = [self._encode(ex["prompt"], ex["rejected"]) for ex in batch]
         c_ids, c_attn = _pad_to(chosen, pad_id, side="right")
         r_ids, r_attn = _pad_to(rejected, pad_id, side="right")
-        return {
+        out = {
             "chosen_input_ids": c_ids,
             "chosen_attention_mask": c_attn,
             "rejected_input_ids": r_ids,
             "rejected_attention_mask": r_attn,
         }
+        if self.emit_loss_mask:
+            # 1 over chosen-response tokens only (prompt + padding -> 0). The boundary is the
+            # prompt's token count, capped to the (possibly truncated) real sequence length.
+            T = c_ids.size(1)
+            masks = []
+            for ex, ids in zip(batch, chosen):
+                plen = min(self._prompt_len(ex["prompt"]), len(ids))
+                masks.append([0] * plen + [1] * (len(ids) - plen) + [0] * (T - len(ids)))
+            out["chosen_loss_mask"] = torch.tensor(masks, dtype=torch.long)
+        return out
 
 
 @dataclass

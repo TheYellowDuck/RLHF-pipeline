@@ -43,6 +43,24 @@ def bradley_terry_loss(chosen_rewards: torch.Tensor, rejected_rewards: torch.Ten
     return -F.logsigmoid(diff).mean()
 
 
+def aux_lm_loss(logits: torch.Tensor, input_ids: torch.Tensor, loss_mask: torch.Tensor):
+    """Causal-LM cross-entropy on the chosen response (GRM auxiliary loss, arXiv:2406.10216).
+
+    Standard next-token shift (predict t+1 from <=t), averaged over the response tokens only
+    (``loss_mask`` is 1 there, 0 on prompt + padding). Keeping the hidden states able to
+    reconstruct good text regularizes the reward head and improves OOD generalization. Logits
+    are cast to fp32 so the cross-entropy is stable under bf16 autocast.
+    """
+    shift_logits = logits[:, :-1, :].float()
+    shift_labels = input_ids[:, 1:]
+    shift_mask = loss_mask[:, 1:].to(shift_logits.dtype)
+    ce = F.cross_entropy(
+        shift_logits.reshape(-1, shift_logits.size(-1)), shift_labels.reshape(-1),
+        reduction="none",
+    ).view(shift_labels.shape)
+    return (ce * shift_mask).sum() / shift_mask.sum().clamp_min(1.0)
+
+
 class RewardTrainer:
     def __init__(self, model, tokenizer, cfg, device, metric_logger=None, accelerator=None):
         self.acc = accelerator
@@ -55,20 +73,32 @@ class RewardTrainer:
         self.bf16 = bool(cfg.train.get("bf16", False))
         self.margin = float(cfg.train.get("margin", 0.0))
         self.label_smoothing = float(cfg.train.get("label_smoothing", 0.0))
+        # GRM auxiliary LM regularization (arXiv:2406.10216): total loss = L_BT + coef * L_LM.
+        # Needs a model built with aux_lm=True (keeps the LM head); warn + disable if it isn't.
+        self.aux_lm_coef = float(cfg.train.get("aux_lm_coef", 0.0))
+        if self.aux_lm_coef > 0 and not getattr(self.model, "aux_lm", False):
+            self.log.warning("aux_lm_coef>0 but the reward model has no LM head (built with "
+                             "aux_lm=False) — disabling the auxiliary LM loss")
+            self.aux_lm_coef = 0.0
         if cfg.train.get("gradient_checkpointing", False):
             self.model.enable_gradient_checkpointing()
         self.global_step = 0
 
     def _loader(self, ds, shuffle: bool):
-        coll = PreferenceCollator(self.tokenizer, max_length=self.cfg.data.max_length)
+        coll = PreferenceCollator(self.tokenizer, max_length=self.cfg.data.max_length,
+                                  emit_loss_mask=self.aux_lm_coef > 0)
         return DataLoader(
             ds, batch_size=self.cfg.train.batch_size, shuffle=shuffle, collate_fn=coll, drop_last=shuffle
         )
 
-    def _scores(self, batch):
-        c = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"])
+    def _scores(self, batch, with_logits: bool = False):
+        if with_logits:
+            c, c_logits = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"],
+                                     return_lm_logits=True)
+        else:
+            c, c_logits = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"]), None
         r = self.model(batch["rejected_input_ids"], batch["rejected_attention_mask"])
-        return c, r
+        return c, r, c_logits
 
     def train(self, train_ds, eval_ds=None):
         loader = self._loader(train_ds, shuffle=True)
@@ -89,8 +119,11 @@ class RewardTrainer:
             for batch in loader:
                 batch = move_to_device(batch, self.device)
                 with autocast_ctx(self.device, self.bf16):
-                    c, r = self._scores(batch)
-                    loss = bradley_terry_loss(c, r, self.margin, self.label_smoothing) / grad_accum
+                    c, r, c_logits = self._scores(batch, with_logits=self.aux_lm_coef > 0)
+                    bt = bradley_terry_loss(c, r, self.margin, self.label_smoothing)
+                    aux = (aux_lm_loss(c_logits, batch["chosen_input_ids"], batch["chosen_loss_mask"])
+                           if self.aux_lm_coef > 0 else bt.new_zeros(()))
+                    loss = (bt + self.aux_lm_coef * aux) / grad_accum
                 acc_backward(self.acc, loss)
                 micro += 1
                 if micro % grad_accum == 0:
@@ -103,6 +136,8 @@ class RewardTrainer:
                         m = {"loss": loss.item() * grad_accum, "accuracy": acc,
                              "reward_chosen": c.mean().item(), "reward_rejected": r.mean().item(),
                              "reward_margin": (c - r).mean().item(), "lr": sched.get_last_lr()[0]}
+                        if self.aux_lm_coef > 0:
+                            m["bt_loss"] = bt.item(); m["aux_lm_loss"] = aux.item()
                         if self.metrics: self.metrics.log_metrics(m, self.global_step, prefix="rm")
                         else: self.log.info("step %d %s", self.global_step, m)
                     if main and eval_ds is not None and self.global_step % self.cfg.train.get("eval_every", 200) == 0:
@@ -123,7 +158,7 @@ class RewardTrainer:
         for batch in loader:
             batch = move_to_device(batch, self.device)
             with autocast_ctx(self.device, self.bf16):
-                c, r = self._scores(batch)
+                c, r, _ = self._scores(batch)
                 loss = bradley_terry_loss(c, r, self.margin, self.label_smoothing)
             bsz = c.size(0)
             n += bsz

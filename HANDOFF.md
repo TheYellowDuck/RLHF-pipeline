@@ -57,11 +57,26 @@ The 0.8025 RM is done (Kaggle v14 output). To get a **1.5B policy**, run PPO reu
   rollout_batch_size=8 mini_batch_size=1 generation.max_new_tokens=40` (~5 h), then eval + judge.
 - PPO at 1.5B holds policy(LoRA)+RM on the T4 — should fit with LoRA + mini-batch 1; if OOM drop rollout to 4.
 
-### 4. GRM auxiliary-LM regularization  (optional last code lever, no run yet)
-RM architecture change: load the backbone as `AutoModelForCausalLM` (keep LM head), add aux loss
-`L = L_BT + α·L_LM` (α≈0.05, SFT-reg, no ref model) on the chosen response. Touches
-`rlhf/models/reward_model.py` (from_backbone/forward) + `rlhf/algorithms/reward_trainer.py` + a config
-knob. Expected +3–8 OOD (GRM, arXiv:2406.10216).
+### 4. GRM auxiliary-LM regularization  ✅ BUILT + TESTED (2026-06-28) — ready to launch, no run yet
+Implemented as a strictly **opt-in** lever (default off → existing behavior byte-identical; the 0.5B run
+above is unaffected). `L = L_BT + α·L_LM`, α from `train.aux_lm_coef` (SFT-reg on the chosen response,
+no ref model). When on, the backbone loads as `AutoModelForCausalLM` (LM head kept); the reward is still
+the value head on `hidden_states[-1]`, which is **numerically identical** to the old trunk path
+(smoke test: max Δ=0.00). Touched: `reward_model.py` (aux_lm flag in from_backbone/forward),
+`reward_trainer.py` (`aux_lm_loss` + wiring + per-step bt/aux logging), `preference.py` (opt-in
+`emit_loss_mask` = response-only mask), `train_reward_model.py` (auto-enable LM head when coef>0),
+`configs/reward_model.yaml` (`model.aux_lm`, `train.aux_lm_coef`). Tests: 2 new unit tests (21 pass)
++ `aux_lm_check` in smoke_test (reward-equivalence, learns to 1.00, reloads as trunk-only RM). Expected
++3–8 OOD (GRM, arXiv:2406.10216). **To run** (one knob turns it all on):
+```
+!python scripts/train_reward_model.py -o model.name_or_path=Qwen/Qwen2.5-0.5B-Instruct \
+  -o data.name=argilla/ultrafeedback-binarized-preferences-cleaned \
+  -o data.train_split='train[2000:]' -o data.eval_split='train[:2000]' \
+  -o data.max_samples=10000 -o train.epochs=1 -o train.lr=1.0e-5 -o train.bf16=true \
+  -o train.aux_lm_coef=0.05 -o train.batch_size=2 -o train.grad_accum=8   # batch 2: logits are [B,T,vocab]
+```
+Then eval on the CLEANED test (and an OOD set, e.g. Skywork, to see the GRM lift) vs the 0.726 baseline.
+**Memory caveat:** the LM head makes `[B,T,vocab]` logits — at 0.5B on a T4 use batch 2 / grad_accum 8.
 
 ## Kaggle gotchas (CRITICAL — caused ~10 failed runs)
 - **Always force T4:** `kaggle kernels push -p . --accelerator NvidiaTeslaT4`. Default is **P100**,

@@ -8,7 +8,7 @@ import os
 import torch
 import torch.nn as nn
 
-from .loading import apply_lora, load_base_model, merge_if_peft
+from .loading import apply_lora, load_base_model, load_causal_lm, merge_if_peft
 from .value_head import ValueHead
 
 _CONFIG_NAME = "reward_config.json"
@@ -28,25 +28,44 @@ def last_token_indices(attention_mask: torch.Tensor) -> torch.Tensor:
 
 
 class RewardModel(nn.Module):
-    def __init__(self, backbone: nn.Module, hidden_size: int):
+    def __init__(self, backbone: nn.Module, hidden_size: int, aux_lm: bool = False):
         super().__init__()
         self.backbone = backbone
         self.value_head = ValueHead(hidden_size)
         self.config = backbone.config
+        # GRM mode (arXiv:2406.10216): backbone is an AutoModelForCausalLM whose LM head is
+        # kept, so an auxiliary language-modeling loss can regularize the hidden states. The
+        # reward is still the value head on the last token's hidden state — identical to the
+        # trunk-only path, since hidden_states[-1] is the same post-final-norm representation.
+        self.aux_lm = aux_lm
 
     def forward(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor,
         return_per_token: bool = False,
+        return_lm_logits: bool = False,
     ):
-        out = self.backbone(
-            input_ids=input_ids, attention_mask=attention_mask, return_dict=True
-        )
-        hidden = out.last_hidden_state                       # [B, T, H]
+        if self.aux_lm:
+            out = self.backbone(
+                input_ids=input_ids, attention_mask=attention_mask,
+                output_hidden_states=True, return_dict=True,
+            )
+            hidden = out.hidden_states[-1]                   # == AutoModel.last_hidden_state
+        else:
+            out = self.backbone(
+                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+            )
+            hidden = out.last_hidden_state                   # [B, T, H]
         per_token = self.value_head(hidden.to(self.value_head.proj.weight.dtype))  # [B, T]
         idx = last_token_indices(attention_mask)             # [B]
         rewards = per_token[torch.arange(per_token.size(0), device=per_token.device), idx]
+        if return_lm_logits:
+            if not self.aux_lm:
+                raise ValueError("return_lm_logits requires a model built with aux_lm=True")
+            if return_per_token:
+                return rewards, per_token, out.logits
+            return rewards, out.logits
         if return_per_token:
             return rewards, per_token
         return rewards
@@ -59,12 +78,15 @@ class RewardModel(nn.Module):
         dtype: torch.dtype = torch.float32,
         use_lora: bool = False,
         lora_cfg=None,
+        aux_lm: bool = False,
     ) -> "RewardModel":
-        backbone = load_base_model(name_or_path, dtype=dtype)
+        # GRM keeps the LM head -> load the full causal LM; otherwise just the trunk.
+        backbone = (load_causal_lm if aux_lm else load_base_model)(name_or_path, dtype=dtype)
         hidden_size = backbone.config.hidden_size
         if use_lora:
-            backbone = apply_lora(backbone, lora_cfg or {}, task_type="FEATURE_EXTRACTION")
-        return cls(backbone, hidden_size)
+            task = "CAUSAL_LM" if aux_lm else "FEATURE_EXTRACTION"
+            backbone = apply_lora(backbone, lora_cfg or {}, task_type=task)
+        return cls(backbone, hidden_size, aux_lm=aux_lm)
 
     def enable_gradient_checkpointing(self):
         if getattr(self.backbone, "config", None) is not None:

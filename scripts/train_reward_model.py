@@ -31,9 +31,12 @@ def main():
         acc = Accelerator()
 
     tok = load_tokenizer(cfg.model.name_or_path)
+    # GRM: keep the backbone's LM head whenever the auxiliary LM loss is on (or forced via model.aux_lm).
+    aux_lm = bool(cfg.model.get("aux_lm", False)) or float(cfg.train.get("aux_lm_coef", 0.0)) > 0
     rm = RewardModel.from_backbone(
         cfg.model.name_or_path, dtype=dtype,
         use_lora=cfg.model.get("use_lora", False), lora_cfg=cfg.model.get("lora", {}),
+        aux_lm=aux_lm,
     )
 
     train_ds = load_preference_dataset(

@@ -12,7 +12,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from rlhf.algorithms.reward_trainer import bradley_terry_loss
+from rlhf.algorithms.reward_trainer import aux_lm_loss, bradley_terry_loss
 from rlhf.algorithms.dpo_trainer import dpo_loss
 from rlhf.algorithms.ppo_trainer import AdaptiveKLController
 from rlhf.models.reward_model import last_token_indices
@@ -99,6 +99,41 @@ def test_bradley_terry_label_smoothing_and_margin():
     # margin shrinks the effective gap -> higher loss for the same rewards
     c, r = torch.tensor([1.0]), torch.tensor([0.0])
     assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
+
+
+def test_aux_lm_loss_uniform_logits_masks_prompt_and_padding():
+    V = 5
+    logits = torch.zeros(1, 4, V)                 # uniform -> per-token CE == log(V)
+    input_ids = torch.tensor([[1, 2, 3, 4]])
+    # response tokens at positions 1,2 (prompt=pos0, padding=pos3). After the next-token shift,
+    # only predicting positions 1 and 2 should count -> mean CE == log(V).
+    loss_mask = torch.tensor([[0, 1, 1, 0]])
+    assert abs(aux_lm_loss(logits, input_ids, loss_mask).item() - math.log(V)) < 1e-5
+    # an all-zero mask (no response tokens) is a safe 0, not a divide-by-zero
+    assert aux_lm_loss(logits, input_ids, torch.zeros_like(loss_mask)).item() == 0.0
+
+
+def test_preference_collator_loss_mask_is_response_only():
+    from rlhf.data.preference import PreferenceCollator
+
+    class _WSTok:                                  # whitespace tokenizer: ids don't matter, lengths do
+        pad_token_id = 0
+        def __call__(self, text, add_special_tokens=False):
+            return {"input_ids": [i + 1 for i in range(len(text.split()))]}
+
+    coll = PreferenceCollator(_WSTok(), max_length=512, emit_loss_mask=True)
+    batch = [
+        {"prompt": "the quick ", "chosen": "brown fox jumps", "rejected": "x"},
+        {"prompt": "a ", "chosen": "b", "rejected": "y"},
+    ]
+    out = coll(batch)
+    m = out["chosen_loss_mask"].tolist()
+    # row 0: 2 prompt tokens then 3 response tokens -> [0,0,1,1,1]
+    assert m[0] == [0, 0, 1, 1, 1]
+    # row 1: 1 prompt token, 1 response token, then padding to width 5 -> response-only, pads are 0
+    assert m[1] == [0, 1, 0, 0, 0]
+    # default (no aux loss) collator stays byte-identical: no loss mask emitted
+    assert "chosen_loss_mask" not in PreferenceCollator(_WSTok())(batch)
 
 
 def test_pair_similarity():

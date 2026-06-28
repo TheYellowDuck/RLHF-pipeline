@@ -8,6 +8,7 @@ model:
   dtype: auto                # auto|float32|bfloat16|float16
   use_lora: false
   lora: { r: 16, alpha: 32, dropout: 0.05, target_modules: null }
+  aux_lm: false              # GRM: load the backbone WITH its LM head (auto-on when train.aux_lm_coef>0)
 
 data:
   name: Anthropic/hh-rlhf    # preference dataset. BEST recipe (validated 0.726 held-out, vs a ~0.63 wall on
@@ -42,6 +43,9 @@ train:
   gradient_checkpointing: false   # trade compute for memory on large models
   margin: 0.0                # Bradley-Terry margin (Llama-2 style; helps on separable pairs)
   label_smoothing: 0.1       # soft labels — robust to HH-RLHF's ~25% noisy pairs
+  aux_lm_coef: 0.0           # GRM auxiliary LM loss weight α (arXiv:2406.10216). Try 0.05; keeps the
+                             # LM head able to decode good text -> regularizes the RM, +3-8 OOD. Memory:
+                             # logits are [B,T,vocab]; on a T4 at 0.5B drop batch_size to 2 (grad_accum 8).
   log_every: 10
   eval_every: 200
   save_every: 500
