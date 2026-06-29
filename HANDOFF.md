@@ -25,6 +25,13 @@ RM cleaned **0.726** (margin 0.79), RM old-H4 0.591, PPO RM-judged win-rate **63
 **independent Claude judge gives 49%** (Goodhart; see the PPO bullet). Output downloaded to
 `kaggle_output/`; BOTH checkpoints intact + fully downloadable (`checkpoints/ppo/` 988 MB +
 `checkpoints/reward_model/` 988 MB). Steps **#1 + #2 COMPLETE**.
+
+**ACTIVE RUN (2026-06-28):** kernel **`georgezhang06/rlhf-ppo-1p5b` v1** = step #3, the hack-resistant 1.5B
+PPO (LoRA policy vs the 0.8025 RM dataset, KL target 3 + length/EOS penalties + score_clip, rollout 8,
+forced T4). RUNNING (~5–6 h). A heartbeat polls it; on COMPLETE it downloads, reports the RM-judged
+win-rate, then runs the **local Claude judge** (the honest number) on the downloaded PPO checkpoint. On
+an OOM crash the heartbeat re-pushes at rollout 4. If resuming and it's already COMPLETE, just
+`kaggle kernels output georgezhang06/rlhf-ppo-1p5b` — don't relaunch.
 Remote: `TheYellowDuck/RLHF-pipeline`.
 
 **LOCAL-ONLY commits (not pushed):** the GRM lever (#4) and `notebooks/kaggle_ppo_1.5b.ipynb` (#3) are
