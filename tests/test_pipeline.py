@@ -101,6 +101,16 @@ def test_bradley_terry_label_smoothing_and_margin():
     assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
 
 
+def test_normalize_messages_no_prompt_skywork_style():
+    # Skywork-Reward style: chosen/rejected are full message lists, no separate prompt column.
+    from rlhf.data.preference import _normalize_messages_no_prompt
+    ex = {
+        "chosen":   [{"role": "user", "content": "Q?"}, {"role": "assistant", "content": "good"}],
+        "rejected": [{"role": "user", "content": "Q?"}, {"role": "assistant", "content": "bad"}],
+    }
+    assert _normalize_messages_no_prompt(ex) == {"prompt": "Q?", "chosen": "good", "rejected": "bad"}
+
+
 def test_aux_lm_loss_uniform_logits_masks_prompt_and_padding():
     V = 5
     logits = torch.zeros(1, 4, V)                 # uniform -> per-token CE == log(V)

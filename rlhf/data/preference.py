@@ -66,6 +66,25 @@ def _normalize_messages(example: dict) -> dict:
     }
 
 
+def _first_user(messages) -> str:
+    """First user turn from a chat-message list."""
+    for m in messages:
+        if isinstance(m, dict) and m.get("role") == "user":
+            return m.get("content", "")
+    return messages[0].get("content", "") if messages else ""
+
+
+def _normalize_messages_no_prompt(example: dict) -> dict:
+    """chosen/rejected are full chat-message lists with NO separate prompt column
+    (e.g. Skywork-Reward-Preference-80K). The shared user turn is the prompt; each
+    side's final assistant turn is its response."""
+    return {
+        "prompt": _first_user(example["chosen"]),
+        "chosen": _last_assistant(example["chosen"]),
+        "rejected": _last_assistant(example["rejected"]),
+    }
+
+
 def pair_similarity(a: str, b: str) -> float:
     """Token-set Jaccard similarity of two responses (0 = disjoint, 1 = identical)."""
     sa, sb = set(a.split()), set(b.split())
@@ -127,7 +146,8 @@ def load_preference_dataset(
         d = load_dataset(nm, split=sp)
         cols = set(d.column_names)
         if {"chosen", "rejected"} <= cols and "prompt" not in cols:
-            fn = _normalize_hh
+            # string transcripts (HH) vs chat-message lists with no prompt column (Skywork)
+            fn = _normalize_messages_no_prompt if isinstance(d[0]["chosen"], list) else _normalize_hh
         elif {"prompt", "chosen", "rejected"} <= cols:
             # message-list format (e.g. UltraFeedback) vs plain strings (e.g. rm-static)
             fn = _normalize_messages if isinstance(d[0]["chosen"], list) else _normalize_explicit
