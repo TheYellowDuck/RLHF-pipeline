@@ -54,7 +54,13 @@ download (the broad pull left the 3 GB safetensors 0-byte — the partial-downlo
 status: #1 ✅, #2 ✅, #3 ✅ (real win), #4 GRM built+tested but not yet run.**
 Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 
-**ARC COMPLETE (2026-06-29) — all of #1–#4 done, no active runs.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
+**ACTIVE RUN (2026-06-29):** kernel **`georgezhang06/rlhf-rm-datamix` v1** = the better-DATA A/B
+(`notebooks/kaggle_rm_datamix.ipynb`): matched 0.5B RMs, fixed 6000-pair budget, **uf-only vs uf+Skywork**,
+eval on UF / Skywork / HH-RLHF-OOD. Tests if data diversity (not more PPO) beats the ~59% RM ceiling.
+RUNNING (~3-4 h); a heartbeat reports the 2×3 table + HH-OOD verdict on COMPLETE. New loader adapter
+`_normalize_messages_no_prompt` handles Skywork's schema (verified). If resuming: check that kernel.
+
+**EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
 lift; see the GRM bullet). No Kaggle runs active; no heartbeats. Local checkpoints: `kaggle_ppo_ckpt/`
 (v1 1.5B PPO), `kaggle_ppo_v2/` (v2), `kaggle_output/` (v15 0.5B RM+PPO). origin in sync.

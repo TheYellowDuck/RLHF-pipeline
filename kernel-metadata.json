@@ -1,7 +1,7 @@
 {
-  "id": "georgezhang06/rlhf-rm-grm",
-  "title": "RLHF RM GRM",
-  "code_file": "notebooks/kaggle_rm_grm.ipynb",
+  "id": "georgezhang06/rlhf-rm-datamix",
+  "title": "RLHF RM datamix",
+  "code_file": "notebooks/kaggle_rm_datamix.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
