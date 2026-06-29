@@ -12,15 +12,19 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
 | **1.5B-Instruct + cleaned, LoRA** | **0.8025** | bigger backbone (margin 1.39) — **current best RM** |
 
 - **Full arc: 0.63 → 0.726 → 0.8025** (~+17 pts), every step a diagnosis.
-- **PPO (0.5B), fresh v15 run**: **63.0%** win-rate vs the un-tuned Instruct policy, RM-judged
-  (mean reward **−0.835 → −0.623**). Independent Claude-judge validation (#1) running — number TBD.
-  (An earlier, separate PPO run scored 56%.)
+- **PPO (0.5B), fresh v15 run**: RM-judged **63.0%** win-rate (reward **−0.835 → −0.623**) BUT the
+  independent **Claude judge says 49%** (39 win / 43 lose / 18 tie, n=100, Opus 4.8, position-swapped) —
+  a statistical tie, slightly favoring the *un-tuned* base. **The 63% was Goodhart**: PPO inflated the
+  RM score without real quality gain (the 14-pt RM-vs-judge gap = the reward-hacking tax). This is the
+  headline lesson of step #1 — never trust the RM-judged win-rate alone. (An earlier run scored 56% RM-judged.)
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
 **COMPLETED RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
-0.5B pipeline (cleaned-data RM → PPO → eval, forced T4) — **DONE**. RESULTS.md: RM cleaned **0.726**
-(margin 0.79), RM old-H4 0.591, PPO win-rate **63.0%**. Output downloaded to `kaggle_output/`; the PPO
-checkpoint (`kaggle_output/rlhf-pipeline/checkpoints/ppo/`, 988 MB) is **intact + fully downloadable**.
+0.5B pipeline (cleaned-data RM → PPO → eval, forced T4) — **DONE + judge-validated (#1)**. RESULTS.md:
+RM cleaned **0.726** (margin 0.79), RM old-H4 0.591, PPO RM-judged win-rate **63.0%** — but the
+**independent Claude judge gives 49%** (Goodhart; see the PPO bullet). Output downloaded to
+`kaggle_output/`; BOTH checkpoints intact + fully downloadable (`checkpoints/ppo/` 988 MB +
+`checkpoints/reward_model/` 988 MB). Steps **#1 + #2 COMPLETE**.
 Remote: `TheYellowDuck/RLHF-pipeline`.
 
 **LOCAL-ONLY commits (not pushed):** the GRM lever (#4) and `notebooks/kaggle_ppo_1.5b.ipynb` (#3) are
