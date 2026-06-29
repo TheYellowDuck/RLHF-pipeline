@@ -24,6 +24,12 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
   1024 episodes. Note: KL/seq stayed tiny (~0.03 ≪ 3) and training-time RM score was flat, yet the move
   was small-but-real — *low KL was healthy (a targeted non-hacking nudge), not under-training* (I
   predicted ~50% and was wrong; the judge proved a real win). Checkpoint: `kaggle_ppo_ckpt/` (3.09 GB, intact).
+- **PPO (1.5B) v2 — the RM-ceiling result:** pushed harder (lr 5e-6, 2048 ep) — this time KL/seq DID rise
+  into the budget (0.03 → ~2.0, max 3.2) and the RM score climbed (−1.89 → −1.43), but the **judge = 57.25%**
+  (49 W / 33 L / 18 T) — statistically identical to v1's 59.25% (same 33 base-wins). So **harder PPO bought
+  no extra real win**; the RM-vs-judge gap stayed ~10 pts (Goodhart). Lesson: **~59% is THIS RM's quality
+  ceiling — the reward model, not the PPO, is now the bottleneck.** To go higher, improve the RM (→ GRM).
+  Checkpoint: `kaggle_ppo_v2/` (3.09 GB, intact).
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
 **COMPLETED RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
