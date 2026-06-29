@@ -59,10 +59,12 @@ Arm a heartbeat (~30-min). On COMPLETE → report RM acc + win-rate; download ch
 
 ### 3. STRETCH — full 1.5B policy (staged; the absolute cleanest, but more work)
 **Notebook now exists: `notebooks/kaggle_ppo_1.5b.ipynb`** (auto-discovers the RM under `/kaggle/input`
-via its `reward_config.json` marker, asserts non-empty weights, runs the PPO recipe below + RM-judged
-win-rate → RESULTS.md). The ONLY manual step left is creating the RM Dataset (next bullet); then push
-with that dataset attached (`+ Add Input`, or add its slug to `kernel-metadata.json` `dataset_sources`)
-on a forced T4.
+via its `reward_config.json` marker, skips bundled smoke RMs, asserts the 1.5B weights). It runs a
+**hack-resistant PPO recipe** — KL target 6→3 + firmer init, `length_penalty 0.01`, `missing_eos_penalty
+1.0`, `score_clip 8.0` — added *because v15's 0.5B PPO reward-hacked (RM 63% vs judge 49%)*. On-Kaggle
+win-rate is RM-judged (circular); **judge-validate locally after download** (the notebook prints the
+exact command). Est. **~5–6 h** on a T4 (PPO is ~90%; ≤12 h even if OOM forces rollout 4). RM dataset is
+ready, so launch = push → set kernel id `rlhf-ppo-1p5b` + `dataset_sources` → T4 push.
 
 **Getting the 0.8025 RM into a Dataset — ✅ DONE (2026-06-28).** The dataset
 **`georgezhang06/rlhf-rm-1p5b-08025`** is created + verified (RESULTS.md shows 0.8025; `model.safetensors`
