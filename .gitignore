@@ -30,3 +30,6 @@ cli.err.log
 
 # kaggle api outputs
 kaggle_out/
+
+# Downloaded Kaggle kernel outputs (large; not source)
+kaggle_output/

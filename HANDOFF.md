@@ -12,13 +12,15 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
 | **1.5B-Instruct + cleaned, LoRA** | **0.8025** | bigger backbone (margin 1.39) — **current best RM** |
 
 - **Full arc: 0.63 → 0.726 → 0.8025** (~+17 pts), every step a diagnosis.
-- **PPO (0.5B)**: 56% win-rate vs the un-tuned Instruct policy, RM-judged (mean reward −0.654 → −0.587).
+- **PPO (0.5B), fresh v15 run**: **63.0%** win-rate vs the un-tuned Instruct policy, RM-judged
+  (mean reward **−0.835 → −0.623**). Independent Claude-judge validation (#1) running — number TBD.
+  (An earlier, separate PPO run scored 56%.)
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
-**ACTIVE RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
-0.5B pipeline (cleaned-data RM → PPO → eval, forced T4), launched and RUNNING. A ~30-min heartbeat is
-polling it; on COMPLETE it pulls RESULTS.md, reports RM acc + win-rate, then runs #1 (judge-validate).
-If you're resuming and this run is already COMPLETE, just `kaggle kernels output` it — don't relaunch.
+**COMPLETED RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
+0.5B pipeline (cleaned-data RM → PPO → eval, forced T4) — **DONE**. RESULTS.md: RM cleaned **0.726**
+(margin 0.79), RM old-H4 0.591, PPO win-rate **63.0%**. Output downloaded to `kaggle_output/`; the PPO
+checkpoint (`kaggle_output/rlhf-pipeline/checkpoints/ppo/`, 988 MB) is **intact + fully downloadable**.
 Remote: `TheYellowDuck/RLHF-pipeline`.
 
 **LOCAL-ONLY commits (not pushed):** the GRM lever (#4) and `notebooks/kaggle_ppo_1.5b.ipynb` (#3) are
@@ -58,9 +60,14 @@ win-rate → RESULTS.md). The ONLY manual step left is creating the RM Dataset (
 with that dataset attached (`+ Add Input`, or add its slug to `kernel-metadata.json` `dataset_sources`)
 on a forced T4.
 
-**Getting the 0.8025 RM into a Dataset (Option A — the cheap path).** There is **no API/CLI way to pull a
-specific *old* kernel version's output** (`kaggle kernels output` only serves the LATEST version — open
-feature request, issue #442). The 0.8025 RM is v14; the kernel moved on to v15, so v14 is **UI-only**:
+**Getting the 0.8025 RM into a Dataset — ✅ DONE (2026-06-28).** The dataset
+**`georgezhang06/rlhf-rm-1p5b-08025`** is created + verified (RESULTS.md shows 0.8025; `model.safetensors`
+= 3.09 GB, complete). It bundles the whole `/kaggle/working` tree (incl. tiny smoke RMs), but the PPO
+notebook now skips `/smoke/` and picks the largest-weights checkpoint, so it lands on the real 1.5B RM.
+**So #3 is ready to launch** (push → set kernel id `rlhf-ppo-1p5b` + `dataset_sources` → T4 push). How it
+was made, for reference: there is **no API/CLI way to pull a specific *old* kernel version's output**
+(`kaggle kernels output` only serves the LATEST — issue #442); v14 was UI-only, so it was created via the
+Kaggle UI "New Dataset → from kernel output" on version 14:
 1. Kaggle UI → the `rlhf-pipeline-run` kernel → pick **version 14** → *Output* → **Download** the
    `checkpoints/reward_model/` folder (browser download is reliable; the CLI partial-download bug doesn't apply).
 2. `scripts/make_rm_dataset.sh <that-folder>` — drills to the `reward_config.json` dir, sanity-checks the
