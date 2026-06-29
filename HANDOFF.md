@@ -17,6 +17,13 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
   a statistical tie, slightly favoring the *un-tuned* base. **The 63% was Goodhart**: PPO inflated the
   RM score without real quality gain (the 14-pt RM-vs-judge gap = the reward-hacking tax). This is the
   headline lesson of step #1 — never trust the RM-judged win-rate alone. (An earlier run scored 56% RM-judged.)
+- **PPO (1.5B, hack-resistant) — THE WIN (#3, judge-validated):** RM-judged 69% AND independent **Claude
+  judge 59.25%** (52 win / 33 lose / 15 tie, n=100, Opus 4.8, swapped). Unlike v15, the directions
+  **agree** and the judge clears 50% by ~9 pts — a **genuine** quality gain, not Goodhart. Recipe: 1.5B
+  LoRA policy + the **0.8025** RM + tight KL (target 3) + length/EOS penalties + score_clip, lr 1e-6,
+  1024 episodes. Note: KL/seq stayed tiny (~0.03 ≪ 3) and training-time RM score was flat, yet the move
+  was small-but-real — *low KL was healthy (a targeted non-hacking nudge), not under-training* (I
+  predicted ~50% and was wrong; the judge proved a real win). Checkpoint: `kaggle_ppo_ckpt/` (3.09 GB, intact).
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
 **COMPLETED RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
@@ -26,17 +33,13 @@ RM cleaned **0.726** (margin 0.79), RM old-H4 0.591, PPO RM-judged win-rate **63
 `kaggle_output/`; BOTH checkpoints intact + fully downloadable (`checkpoints/ppo/` 988 MB +
 `checkpoints/reward_model/` 988 MB). Steps **#1 + #2 COMPLETE**.
 
-**ACTIVE RUN (2026-06-28):** kernel **`georgezhang06/rlhf-ppo-1p5b` v1** = step #3, the hack-resistant 1.5B
-PPO (LoRA policy vs the 0.8025 RM dataset, KL target 3 + length/EOS penalties + score_clip, rollout 8,
-forced T4). RUNNING (~5–6 h). A heartbeat polls it; on COMPLETE it downloads, reports the RM-judged
-win-rate, then runs the **local Claude judge** (the honest number) on the downloaded PPO checkpoint. On
-an OOM crash the heartbeat re-pushes at rollout 4. If resuming and it's already COMPLETE, just
-`kaggle kernels output georgezhang06/rlhf-ppo-1p5b` — don't relaunch.
-Remote: `TheYellowDuck/RLHF-pipeline`.
-
-**LOCAL-ONLY commits (not pushed):** the GRM lever (#4) and `notebooks/kaggle_ppo_1.5b.ipynb` (#3) are
-committed to local `main` but NOT pushed. The Kaggle notebooks `git clone` from GitHub, so **`git push`
-first** before launching #3 or a GRM run (the running #2 job cloned earlier, so it is unaffected).
+**COMPLETED RUN (2026-06-28):** kernel **`georgezhang06/rlhf-ppo-1p5b` v1** = step #3, the hack-resistant
+1.5B PPO — **DONE + judge-validated**. Ran ~1.5 h (faster than the ~5 h estimate), rollout 8 fit the T4
+(no OOM). Result: RM-judged 69%, **Claude judge 59.25%** — the project's first genuine PPO win (see the
+PPO-1.5B bullet). Checkpoint pulled via a *targeted* `--file-pattern 'checkpoints/ppo/' --page-size 200 -o`
+download (the broad pull left the 3 GB safetensors 0-byte — the partial-download bug). **Steps #1–#4
+status: #1 ✅, #2 ✅, #3 ✅ (real win), #4 GRM built+tested but not yet run.**
+Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 
 ## Reality check on time (READ THIS)
 A 1.5B RM on a free T4 with the OOM-safe config (batch 4 + gradient checkpointing) takes **~9 h** for
