@@ -30,6 +30,13 @@ exact commands, and the Kaggle gotchas so nothing gets re-discovered.
   no extra real win**; the RM-vs-judge gap stayed ~10 pts (Goodhart). Lesson: **~59% is THIS RM's quality
   ceiling — the reward model, not the PPO, is now the bottleneck.** To go higher, improve the RM (→ GRM).
   Checkpoint: `kaggle_ppo_v2/` (3.09 GB, intact).
+- **GRM aux-LM A/B (#4) — honest NEGATIVE:** matched 0.5B RMs, only diff = `aux_lm_coef` (0 vs 0.05),
+  same cleaned UF. in-dist: base **0.7255** vs GRM **0.7175**; OOD (HH-RLHF): base **0.483** vs GRM **0.488**.
+  The aux loss gave **+0.5 pt OOD / −0.8 pt in-dist — both within noise** (n=2000, ±~1.1 pt SE), nowhere
+  near the claimed +3–8. Caveat: both RMs are **~chance (0.48) on HH-RLHF** (a UF-trained RM doesn't
+  transfer to HH dialogue) — the OOD set is too far-shifted to discriminate (floor effect). **Verdict: no
+  evidence GRM helps here; NOT worth a 1.5B GRM re-run on this evidence.** To retest GRM fairly, use a
+  closer OOD set where the base RM is above chance (e.g. RewardBench / another instruction-following pref set).
 - **Chat UI/CLI** works: `./chat` (terminal) and `./ui` (zero-dep browser UI), Best-of-N reranking built in.
 
 **COMPLETED RUN (2026-06-28):** kernel `georgezhang06/rlhf-pipeline-run` **v15** = step #2, the fresh full
@@ -47,11 +54,10 @@ download (the broad pull left the 3 GB safetensors 0-byte — the partial-downlo
 status: #1 ✅, #2 ✅, #3 ✅ (real win), #4 GRM built+tested but not yet run.**
 Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 
-**ACTIVE CHAIN (2026-06-29):** (A) PPO v2 `rlhf-ppo-1p5b` v2 — **DONE, judge 57.25%** (= v1's 59.25%, the
-RM ceiling; see the PPO-v2 bullet). (B) kernel **`georgezhang06/rlhf-rm-grm` = the GRM A/B — NOW RUNNING**
-(`notebooks/kaggle_rm_grm.ipynb`: matched base vs aux_lm_coef=0.05 0.5B RMs, eval in-dist cleaned-UF +
-OOD HH-RLHF; ~3-4 h). A heartbeat monitors it; on COMPLETE it reports the base-vs-GRM OOD table (does the
-aux-LM loss buy OOD generalization?). If resuming: check `rlhf-rm-grm` status; don't relaunch if COMPLETE.
+**ARC COMPLETE (2026-06-29) — all of #1–#4 done, no active runs.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
+**57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
+lift; see the GRM bullet). No Kaggle runs active; no heartbeats. Local checkpoints: `kaggle_ppo_ckpt/`
+(v1 1.5B PPO), `kaggle_ppo_v2/` (v2), `kaggle_output/` (v15 0.5B RM+PPO). origin in sync.
 
 ## Reality check on time (READ THIS)
 A 1.5B RM on a free T4 with the OOM-safe config (batch 4 + gradient checkpointing) takes **~9 h** for
@@ -118,7 +124,7 @@ The 0.8025 RM is done (Kaggle v14 output). To get a **1.5B policy**, run PPO reu
   rollout_batch_size=8 mini_batch_size=1 generation.max_new_tokens=40` (~5 h), then eval + judge.
 - PPO at 1.5B holds policy(LoRA)+RM on the T4 — should fit with LoRA + mini-batch 1; if OOM drop rollout to 4.
 
-### 4. GRM auxiliary-LM regularization  ✅ BUILT + TESTED (2026-06-28) — ready to launch, no run yet
+### 4. GRM auxiliary-LM regularization  ✅ BUILT + RUN (2026-06-29) — negative result (see the GRM bullet up top)
 Implemented as a strictly **opt-in** lever (default off → existing behavior byte-identical; the 0.5B run
 above is unaffected). `L = L_BT + α·L_LM`, α from `train.aux_lm_coef` (SFT-reg on the chosen response,
 no ref model). When on, the backbone loads as `AutoModelForCausalLM` (LM head kept); the reward is still
