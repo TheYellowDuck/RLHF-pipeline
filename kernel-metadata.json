@@ -1,15 +1,13 @@
 {
-  "id": "georgezhang06/rlhf-ppo-1p5b",
-  "title": "RLHF PPO 1p5b",
-  "code_file": "notebooks/kaggle_ppo_1.5b.ipynb",
+  "id": "georgezhang06/rlhf-rm-grm",
+  "title": "RLHF RM GRM",
+  "code_file": "notebooks/kaggle_rm_grm.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": [
-    "georgezhang06/rlhf-rm-1p5b-08025"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
 }

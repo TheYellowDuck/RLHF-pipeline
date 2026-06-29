@@ -47,12 +47,11 @@ download (the broad pull left the 3 GB safetensors 0-byte — the partial-downlo
 status: #1 ✅, #2 ✅, #3 ✅ (real win), #4 GRM built+tested but not yet run.**
 Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 
-**ACTIVE CHAIN (2026-06-29):** (A) kernel `georgezhang06/rlhf-ppo-1p5b` **v2** = PPO pushed further
-(lr 1e-6→5e-6, 1024→2048 ep, same leash) RUNNING (~3 h) to test if using more of the KL budget buys
-more *real* win past v1's 59.25%. Then (B) kernel `georgezhang06/rlhf-rm-grm` = the **GRM A/B**
-(`notebooks/kaggle_rm_grm.ipynb`: matched base vs aux_lm_coef=0.05 0.5B RMs, eval in-dist + OOD HH-RLHF)
-auto-launches when A frees the T4. One chaining heartbeat drives both → judge-validates A → launches B →
-monitors B. If resuming: check both kernels' status; don't relaunch a COMPLETE one.
+**ACTIVE CHAIN (2026-06-29):** (A) PPO v2 `rlhf-ppo-1p5b` v2 — **DONE, judge 57.25%** (= v1's 59.25%, the
+RM ceiling; see the PPO-v2 bullet). (B) kernel **`georgezhang06/rlhf-rm-grm` = the GRM A/B — NOW RUNNING**
+(`notebooks/kaggle_rm_grm.ipynb`: matched base vs aux_lm_coef=0.05 0.5B RMs, eval in-dist cleaned-UF +
+OOD HH-RLHF; ~3-4 h). A heartbeat monitors it; on COMPLETE it reports the base-vs-GRM OOD table (does the
+aux-LM loss buy OOD generalization?). If resuming: check `rlhf-rm-grm` status; don't relaunch if COMPLETE.
 
 ## Reality check on time (READ THIS)
 A 1.5B RM on a free T4 with the OOM-safe config (batch 4 + gradient checkpointing) takes **~9 h** for
