@@ -1,15 +1,13 @@
 {
-  "id": "georgezhang06/rlhf-rewardbench",
-  "title": "RLHF RewardBench",
-  "code_file": "notebooks/kaggle_rewardbench.ipynb",
+  "id": "georgezhang06/rlhf-rm-safety",
+  "title": "RLHF RM safety",
+  "code_file": "notebooks/kaggle_rm_safety.ipynb",
   "language": "python",
   "kernel_type": "notebook",
   "is_private": true,
   "enable_gpu": true,
   "enable_internet": true,
-  "dataset_sources": [
-    "georgezhang06/rlhf-rm-1p5b-08025"
-  ],
+  "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": []
 }

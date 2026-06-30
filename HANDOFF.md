@@ -80,6 +80,22 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   the measurable next lever is a data-mix with SAFETY + adversarial pairs (not more helpfulness like
   Skywork), with RewardBench Safety/Chat-Hard as the metric.** Kaggle GPU quota (30 h/wk) is EXHAUSTED;
   RewardBench needs no GPU (ran local). The ready `rlhf-rewardbench` kernel can push once quota resets.
+- **Safety-mix RM (#7) — THE WIN that closes the loop (2026-06-30).** Acted on the RewardBench Safety gap:
+  a 0.5B RM on **4000 UF + 2000 PKU-SafeRLHF** (PKU adapter: chosen = safer response). RewardBench:
+
+  | category-mean | Chat | Chat-Hard | Safety | Reasoning | overall |
+  |---|---|---|---|---|---|
+  | uf-only 0.5B (v15) | 0.789 | 0.413 | 0.368 | 0.630 | 0.550 |
+  | **safety-mix 0.5B** | 0.829 | 0.342 | **0.563** | 0.705 | **0.610** |
+
+  **Safety +19.5 pts** (xstest-should-refuse 0.36→0.82, refusals-offensive 0.16→0.58) at a −7 pt Chat-Hard
+  cost. The 0.5B safety-mix **matches the 1.5B 0.8025 RM overall (0.610) and beats it on Safety (0.563 vs
+  0.286)** — targeted data > 3× scale. **This validates the whole method: RewardBench finds the gap →
+  targeted data fixes it → RewardBench measures it, no PPO+judge needed.** Trained LOCALLY (Kaggle quota
+  out): MPS OOM'd on the 36 GB Mac, but **CPU works (~16.5 s/step, ~1.7 h for a 0.5B / 6k pairs, no OOM)** —
+  `-o device=cpu -o train.batch_size=1 -o train.grad_accum=16 -o model.dtype=float32`. Checkpoint:
+  `checkpoints/rm_safety_local/` (gitignored). The `rlhf-rm-safety` Kaggle kernel is ready for the clean
+  1.5B version once quota resets.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
