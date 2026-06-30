@@ -65,11 +65,21 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 - **RewardBench yardstick (#6) — BUILT + first numbers.** `scripts/eval_rewardbench.py` +
   `rlhf/eval/rewardbench.py` score an RM on RewardBench with the per-category breakdown
   (Chat / Chat-Hard / Safety / Reasoning + category-mean). Finally *discriminating* (vs HH's flat 0.48).
-  **v15 0.5B RM**: overall **0.550** (Chat 0.789, Chat-Hard 0.413, Safety 0.368, Reasoning 0.630, n=2985) —
-  good on easy Chat, ~chance on the hard/safety categories. The **1.5B 0.8025 RM** eval is running locally
-  (CPU, ~50 min) — number TBD. Run it on any RM: `scripts/eval_rewardbench.py --reward-model <ckpt>`.
-  **Kaggle GPU quota (30 h/week) is EXHAUSTED** — the ready `rlhf-rewardbench` kernel (kernel-metadata
-  points at it) can be pushed once quota resets; meanwhile RewardBench needs no GPU, so run it on CPU/local.
+  Run it on any RM: `scripts/eval_rewardbench.py --reward-model <ckpt>` (CPU-fine; ~16 min 0.5B / ~50 min 1.5B).
+
+  | category-mean | Chat | Chat-Hard | Safety | Reasoning | overall |
+  |---|---|---|---|---|---|
+  | v15 **0.5B** (0.726) | 0.789 | 0.413 | 0.368 | 0.630 | **0.550** |
+  | **1.5B** (0.8025) | 0.901 | 0.414 | **0.286** | 0.840 | **0.610** |
+
+  Findings: (1) the **1.5B is a better RM (0.610 > 0.550)** — RewardBench corroborates the 0.8025>0.726
+  held-out ranking on a neutral bench. (2) Gains are in **Chat + Reasoning** (capacity-sensitive). (3)
+  **Chat-Hard stuck ~0.41 for both** (adversarial = a data/method limit, not scale). (4) **Safety gets
+  WORSE with scale (0.37→0.29; refusals-dangerous 0.07)** — UltraFeedback is helpfulness-only, so the RM
+  confidently prefers harmful-but-helpful over refusals, and the bigger model does it *more*. **Actionable:
+  the measurable next lever is a data-mix with SAFETY + adversarial pairs (not more helpfulness like
+  Skywork), with RewardBench Safety/Chat-Hard as the metric.** Kaggle GPU quota (30 h/wk) is EXHAUSTED;
+  RewardBench needs no GPU (ran local). The ready `rlhf-rewardbench` kernel can push once quota resets.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
