@@ -97,11 +97,22 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   `checkpoints/rm_safety_local/` (gitignored). The `rlhf-rm-safety` Kaggle kernel is ready for the clean
   1.5B version once quota resets.
 
-  **IN FLIGHT (2026-06-30): 1.5B safety-mix RM, local CPU.** Same 4000 UF + 2000 PKU mix at **1.5B + LoRA**
-  (lr 1e-4, batch 1 / grad_accum 16, fp32, device cpu — LoRA keeps it under the 36 GB cap; no OOM).
-  ~53 s/step × 375 ≈ **~5.5 h train** + ~50 min RewardBench eval. Output `checkpoints/rm_safety_1p5b_local/`;
-  logs `/tmp/rm_safety_1p5b.log` + `/tmp/rb_safety_1p5b.log`. Predicted: lifts the 1.5B's 0.286 Safety like
-  the 0.5B's 0.368→0.563. If resuming: check that log/checkpoint; if RewardBench done, read `/tmp/rb_safety_1p5b.log`.
+- **1.5B safety-mix RM (#8) — THE BEST RM of the project (2026-06-30, local CPU LoRA, ~5.5 h).** Same
+  4000 UF + 2000 PKU mix at 1.5B+LoRA. RewardBench full board (category-mean):
+
+  | RM | Chat | Chat-Hard | Safety | Reasoning | overall |
+  |---|---|---|---|---|---|
+  | 0.5B uf-only | 0.789 | 0.413 | 0.368 | 0.630 | 0.550 |
+  | 1.5B uf-only (0.8025) | 0.901 | 0.414 | 0.286 | 0.840 | 0.610 |
+  | 0.5B safety-mix | 0.829 | 0.342 | 0.563 | 0.705 | 0.610 |
+  | **1.5B safety-mix** | **0.908** | 0.382 | **0.749** | **0.822** | **0.715** |
+
+  **Best overall by far (0.715).** Safety **0.286 → 0.749 (+46 pts!)** (refusals-dangerous 0.07→0.79,
+  refusals-offensive 0.03→0.83, xstest-should-refuse→0.90) while **Chat (0.908) + Reasoning (0.822) held**.
+  Safety effect is BIGGER at 1.5B (+46) than 0.5B (+19.5) — capacity learns safety better. Only Chat-Hard
+  dips slightly (the adversarial wall, ~0.38). Checkpoint `checkpoints/rm_safety_1p5b_local/` (LoRA-merged,
+  full 1.5B, gitignored). **This is the RM to carry into the final PPO + judge** (when Kaggle quota resets,
+  or PPO is too heavy for local CPU). It would also make a strong Kaggle Dataset for a #3-style PPO run.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
