@@ -113,6 +113,20 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   dips slightly (the adversarial wall, ~0.38). Checkpoint `checkpoints/rm_safety_1p5b_local/` (LoRA-merged,
   full 1.5B, gitignored). **This is the RM to carry into the final PPO + judge** (when Kaggle quota resets,
   or PPO is too heavy for local CPU). It would also make a strong Kaggle Dataset for a #3-style PPO run.
+- **OVER-REFUSAL caveat + a failed fix (#9, 2026-06-30) — important correction.** The safety-mix "win" has a
+  cost I initially buried: adding PKU safety data improved *refusing real harm* but **regressed
+  `xstest-should-respond`** (the over-refusal test: 1.5B 0.756→0.636; 0.5B uf 0.71 → v1-safety 0.65), i.e.
+  the RM started preferring refusals on benign-but-scary prompts (the "coconuts are not edible" failure).
+  The RewardBench Safety *category mean* hid this (it's mostly refuse-harm subsets). **Fix added**:
+  `rewardbench_report` now also returns `safety_refuse` / `safety_respond` / `safety_balanced` (harmonic
+  mean) so over-refusal can't hide; `eval_rewardbench.py` prints the split. **Attempted data fix FAILED**:
+  re-labeled `_normalize_pku` to be helpfulness-preserving (chosen=safe only when one unsafe; both-safe →
+  more-helpful `better_response_id`; both-unsafe dropped). 0.5B re-run (v2): balanced **0.558 < v1 0.590**,
+  respond-benign 0.65→0.55 — it did NOT help (the harm-refusal pairs themselves drive over-refusal; PKU
+  both-safe prompts aren't benign-*scary*, so they don't teach answering them). **Real fix needs targeted
+  benign-scary→helpful pairs (XSTest/OR-Bench style) or a dose sweep, not PKU relabeling.** The balanced
+  metric is now the honest safety yardstick. (Caveats: v1/v2 used different PKU slices; should-respond is
+  ~250 ex, noisy. Verdicts: track `safety_balanced`, not the Safety mean.)
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
