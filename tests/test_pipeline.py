@@ -117,6 +117,16 @@ def test_normalize_pku_safety_aware_helpfulness_preserving():
     assert _normalize_pku(both_unsafe)["chosen"] == ""
 
 
+def test_local_jsonl_preference_loading(tmp_path):
+    import json
+    from rlhf.data import load_preference_dataset
+    f = tmp_path / "pp.jsonl"
+    f.write_text("\n".join(json.dumps({"prompt": "p", "chosen": " good", "rejected": " bad"})
+                           for _ in range(3)))
+    ds = load_preference_dataset(f"{f}:train", "train", None)
+    assert len(ds) == 3 and ds[0]["chosen"] == " good" and ds[0]["rejected"] == " bad"
+
+
 def test_rewardbench_balanced_safety_exposes_over_refusal():
     from rlhf.eval import rewardbench_report
     # an over-refuser: aces refuse-harm subsets but tanks should-respond

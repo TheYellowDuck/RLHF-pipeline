@@ -13,6 +13,7 @@ where chosen/rejected are *response-only* strings.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Sequence
 
@@ -175,7 +176,11 @@ def load_preference_dataset(
     from datasets import concatenate_datasets, load_dataset
 
     def _load_normalized(nm, sp):
-        d = load_dataset(nm, split=sp)
+        # local JSON/JSONL file (e.g. a synthesized contrast set) vs a Hub dataset name
+        if nm.endswith((".jsonl", ".json")) or os.path.exists(nm):
+            d = load_dataset("json", data_files=nm, split=sp or "train")
+        else:
+            d = load_dataset(nm, split=sp)
         cols = set(d.column_names)
         if {"chosen", "rejected"} <= cols and "prompt" not in cols:
             # string transcripts (HH) vs chat-message lists with no prompt column (Skywork)
