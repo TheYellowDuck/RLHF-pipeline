@@ -62,6 +62,14 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   **no HH-OOD lift** (0.4855 ≈ 0.483 ≈ chance; same floor effect as GRM). **Meta-lesson: HH-RLHF accuracy
   is a poor yardstick for "better RM"** (everything UF-trained is at the floor); to really test "better RM
   → better policy" you need the 1.5B-RM → PPO → judge chain or a non-saturated bench (RewardBench).
+- **RewardBench yardstick (#6) — BUILT + first numbers.** `scripts/eval_rewardbench.py` +
+  `rlhf/eval/rewardbench.py` score an RM on RewardBench with the per-category breakdown
+  (Chat / Chat-Hard / Safety / Reasoning + category-mean). Finally *discriminating* (vs HH's flat 0.48).
+  **v15 0.5B RM**: overall **0.550** (Chat 0.789, Chat-Hard 0.413, Safety 0.368, Reasoning 0.630, n=2985) —
+  good on easy Chat, ~chance on the hard/safety categories. The **1.5B 0.8025 RM** eval is running locally
+  (CPU, ~50 min) — number TBD. Run it on any RM: `scripts/eval_rewardbench.py --reward-model <ckpt>`.
+  **Kaggle GPU quota (30 h/week) is EXHAUSTED** — the ready `rlhf-rewardbench` kernel (kernel-metadata
+  points at it) can be pushed once quota resets; meanwhile RewardBench needs no GPU, so run it on CPU/local.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
