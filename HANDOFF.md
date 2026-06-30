@@ -97,6 +97,12 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   `checkpoints/rm_safety_local/` (gitignored). The `rlhf-rm-safety` Kaggle kernel is ready for the clean
   1.5B version once quota resets.
 
+  **IN FLIGHT (2026-06-30): 1.5B safety-mix RM, local CPU.** Same 4000 UF + 2000 PKU mix at **1.5B + LoRA**
+  (lr 1e-4, batch 1 / grad_accum 16, fp32, device cpu — LoRA keeps it under the 36 GB cap; no OOM).
+  ~53 s/step × 375 ≈ **~5.5 h train** + ~50 min RewardBench eval. Output `checkpoints/rm_safety_1p5b_local/`;
+  logs `/tmp/rm_safety_1p5b.log` + `/tmp/rb_safety_1p5b.log`. Predicted: lifts the 1.5B's 0.286 Safety like
+  the 0.5B's 0.368→0.563. If resuming: check that log/checkpoint; if RewardBench done, read `/tmp/rb_safety_1p5b.log`.
+
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
 lift; see the GRM bullet). No Kaggle runs active; no heartbeats. Local checkpoints: `kaggle_ppo_ckpt/`
