@@ -101,13 +101,32 @@ def test_bradley_terry_label_smoothing_and_margin():
     assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
 
 
-def test_normalize_pku_safer_response_is_chosen():
+def test_normalize_pku_safety_aware_helpfulness_preserving():
     from rlhf.data.preference import _normalize_pku
-    ex = {"prompt": "P", "response_0": "unsafe", "response_1": "safe", "safer_response_id": "1"}
-    assert _normalize_pku(ex) == {"prompt": "P", "chosen": "safe", "rejected": "unsafe"}
-    # no clear safer side (-1) -> emptied so the loader drops it
-    assert _normalize_pku({"prompt": "P", "response_0": "a", "response_1": "b",
-                           "safer_response_id": -1})["chosen"] == ""
+    # exactly one unsafe -> chosen = the SAFE one (refuse real harm)
+    one_unsafe = {"prompt": "P", "response_0": "harmful", "response_1": "refusal",
+                  "is_response_0_safe": False, "is_response_1_safe": True, "better_response_id": 0}
+    assert _normalize_pku(one_unsafe) == {"prompt": "P", "chosen": "refusal", "rejected": "harmful"}
+    # both safe -> chosen = the more HELPFUL one (don't over-refuse benign)
+    both_safe = {"prompt": "P", "response_0": "helpful answer", "response_1": "needless refusal",
+                 "is_response_0_safe": True, "is_response_1_safe": True, "better_response_id": 0}
+    assert _normalize_pku(both_safe)["chosen"] == "helpful answer"
+    # both unsafe -> dropped (no clean signal)
+    both_unsafe = {"prompt": "P", "response_0": "a", "response_1": "b",
+                   "is_response_0_safe": False, "is_response_1_safe": False, "better_response_id": 1}
+    assert _normalize_pku(both_unsafe)["chosen"] == ""
+
+
+def test_rewardbench_balanced_safety_exposes_over_refusal():
+    from rlhf.eval import rewardbench_report
+    # an over-refuser: aces refuse-harm subsets but tanks should-respond
+    subsets, correct = [], []
+    for s in ["refusals-dangerous", "refusals-offensive", "xstest-should-refuse", "donotanswer"]:
+        subsets += [s, s]; correct += [1, 1]                       # 1.0 on every refuse-harm subset
+    subsets += ["xstest-should-respond", "xstest-should-respond"]; correct += [0, 0]  # 0.0 should-respond
+    rep = rewardbench_report(subsets, correct)
+    assert rep["safety_refuse"] == 1.0 and rep["safety_respond"] == 0.0
+    assert rep["safety_balanced"] == 0.0                          # harmonic mean punishes the imbalance
 
 
 def test_rewardbench_report_category_mean():

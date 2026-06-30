@@ -85,19 +85,35 @@ def _normalize_messages_no_prompt(example: dict) -> dict:
     }
 
 
+def _is_true(v) -> bool:
+    return v in (True, 1, "True", "true", "1")
+
+
 def _normalize_pku(example: dict) -> dict:
-    """PKU-SafeRLHF: prompt + response_0/response_1 + ``safer_response_id`` (0/1). Chosen = the
-    SAFER response so the RM learns to prefer safety (rows with no clear safer side -> dropped)."""
-    try:
-        sid = int(example["safer_response_id"])
-    except (TypeError, ValueError):
-        sid = -1
-    if sid not in (0, 1):
+    """PKU-SafeRLHF: prompt + response_0/response_1 + safety/helpfulness annotations.
+
+    Safety-AWARE but helpfulness-preserving labeling (avoids teaching over-refusal):
+      * exactly one response unsafe -> chosen = the SAFE one  (learn to refuse real harm)
+      * both safe                   -> chosen = the more HELPFUL one (``better_response_id``)
+                                       (don't prefer the refusal when nothing is wrong)
+      * both unsafe                 -> dropped (no clean signal)
+    """
+    s0, s1 = _is_true(example.get("is_response_0_safe")), _is_true(example.get("is_response_1_safe"))
+    if s0 != s1:
+        cid = 0 if s0 else 1
+    elif s0 and s1:                                   # both safe -> prefer helpfulness
+        try:
+            cid = int(example["better_response_id"])
+        except (TypeError, ValueError, KeyError):
+            cid = -1
+    else:                                             # both unsafe -> no clean preference
+        cid = -1
+    if cid not in (0, 1):
         return {"prompt": "", "chosen": "", "rejected": ""}   # filtered out downstream
     return {
         "prompt": example["prompt"],
-        "chosen": example[f"response_{sid}"],
-        "rejected": example[f"response_{1 - sid}"],
+        "chosen": example[f"response_{cid}"],
+        "rejected": example[f"response_{1 - cid}"],
     }
 
 

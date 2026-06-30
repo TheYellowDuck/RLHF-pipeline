@@ -58,6 +58,10 @@ def main():
     for c in ["Chat", "Chat Hard", "Safety", "Reasoning"]:
         if c in rep["per_category"]:
             print(f"  {c:10s} {rep['per_category'][c]:.4f}")
+    if "safety_balanced" in rep:   # the over-refusal-aware view
+        print(f"  Safety split: refuse-harm={rep['safety_refuse']:.4f}  "
+              f"respond-benign={rep['safety_respond']:.4f}  "
+              f"balanced(harm.mean)={rep['safety_balanced']:.4f}")
     log.info("rewardbench report: %s", rep)
 
 
