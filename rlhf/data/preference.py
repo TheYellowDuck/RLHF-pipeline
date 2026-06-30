@@ -85,6 +85,22 @@ def _normalize_messages_no_prompt(example: dict) -> dict:
     }
 
 
+def _normalize_pku(example: dict) -> dict:
+    """PKU-SafeRLHF: prompt + response_0/response_1 + ``safer_response_id`` (0/1). Chosen = the
+    SAFER response so the RM learns to prefer safety (rows with no clear safer side -> dropped)."""
+    try:
+        sid = int(example["safer_response_id"])
+    except (TypeError, ValueError):
+        sid = -1
+    if sid not in (0, 1):
+        return {"prompt": "", "chosen": "", "rejected": ""}   # filtered out downstream
+    return {
+        "prompt": example["prompt"],
+        "chosen": example[f"response_{sid}"],
+        "rejected": example[f"response_{1 - sid}"],
+    }
+
+
 def pair_similarity(a: str, b: str) -> float:
     """Token-set Jaccard similarity of two responses (0 = disjoint, 1 = identical)."""
     sa, sb = set(a.split()), set(b.split())
@@ -151,10 +167,13 @@ def load_preference_dataset(
         elif {"prompt", "chosen", "rejected"} <= cols:
             # message-list format (e.g. UltraFeedback) vs plain strings (e.g. rm-static)
             fn = _normalize_messages if isinstance(d[0]["chosen"], list) else _normalize_explicit
+        elif {"response_0", "response_1", "safer_response_id"} <= cols:
+            fn = _normalize_pku                              # PKU-SafeRLHF (safety preferences)
         else:
             raise ValueError(
                 f"Dataset '{nm}' has columns {sorted(cols)}; expected HH-style "
-                "(chosen/rejected), explicit (prompt/chosen/rejected), or chat-message lists."
+                "(chosen/rejected), explicit (prompt/chosen/rejected), chat-message lists, "
+                "or PKU-SafeRLHF (response_0/response_1/safer_response_id)."
             )
         d = d.map(fn, remove_columns=d.column_names, num_proc=num_proc)
         return d.filter(lambda ex: len(ex["chosen"]) > 0 and len(ex["rejected"]) > 0)

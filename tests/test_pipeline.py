@@ -101,6 +101,15 @@ def test_bradley_terry_label_smoothing_and_margin():
     assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
 
 
+def test_normalize_pku_safer_response_is_chosen():
+    from rlhf.data.preference import _normalize_pku
+    ex = {"prompt": "P", "response_0": "unsafe", "response_1": "safe", "safer_response_id": "1"}
+    assert _normalize_pku(ex) == {"prompt": "P", "chosen": "safe", "rejected": "unsafe"}
+    # no clear safer side (-1) -> emptied so the loader drops it
+    assert _normalize_pku({"prompt": "P", "response_0": "a", "response_1": "b",
+                           "safer_response_id": -1})["chosen"] == ""
+
+
 def test_rewardbench_report_category_mean():
     from rlhf.eval import rewardbench_report
     # two Chat subsets (acc 1.0 and 0.5 -> Chat=0.75) and one Safety subset (acc 0.0 -> Safety=0.0)
