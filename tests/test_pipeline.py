@@ -101,6 +101,19 @@ def test_bradley_terry_label_smoothing_and_margin():
     assert bradley_terry_loss(c, r, margin=1.0).item() > bradley_terry_loss(c, r).item()
 
 
+def test_rewardbench_report_category_mean():
+    from rlhf.eval import rewardbench_report
+    # two Chat subsets (acc 1.0 and 0.5 -> Chat=0.75) and one Safety subset (acc 0.0 -> Safety=0.0)
+    subsets = (["alpacaeval-easy"] * 2 + ["mt-bench-easy"] * 2 + ["donotanswer"] * 2)
+    correct = ([1, 1] + [1, 0] + [0, 0])
+    rep = rewardbench_report(subsets, correct)
+    assert abs(rep["per_category"]["Chat"] - 0.75) < 1e-9       # mean(1.0, 0.5)
+    assert rep["per_category"]["Safety"] == 0.0
+    assert abs(rep["overall"] - 0.375) < 1e-9                   # mean(Chat 0.75, Safety 0.0)
+    assert abs(rep["accuracy_micro"] - 3 / 6) < 1e-9           # 3 of 6 correct
+    assert rep["n"] == 6
+
+
 def test_normalize_messages_no_prompt_skywork_style():
     # Skywork-Reward style: chosen/rejected are full message lists, no separate prompt column.
     from rlhf.data.preference import _normalize_messages_no_prompt
