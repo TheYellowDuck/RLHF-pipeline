@@ -54,11 +54,14 @@ download (the broad pull left the 3 GB safetensors 0-byte — the partial-downlo
 status: #1 ✅, #2 ✅, #3 ✅ (real win), #4 GRM built+tested but not yet run.**
 Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
 
-**ACTIVE RUN (2026-06-29):** kernel **`georgezhang06/rlhf-rm-datamix` v1** = the better-DATA A/B
-(`notebooks/kaggle_rm_datamix.ipynb`): matched 0.5B RMs, fixed 6000-pair budget, **uf-only vs uf+Skywork**,
-eval on UF / Skywork / HH-RLHF-OOD. Tests if data diversity (not more PPO) beats the ~59% RM ceiling.
-RUNNING (~3-4 h); a heartbeat reports the 2×3 table + HH-OOD verdict on COMPLETE. New loader adapter
-`_normalize_messages_no_prompt` handles Skywork's schema (verified). If resuming: check that kernel.
+- **Better-DATA A/B (#5) — broader but no OOD lift:** matched 0.5B RMs, fixed 6000-pair budget. The
+  in-notebook uf-only cell crashed (eval_split defaulted to `test`, which cleaned-UF lacks — now fixed),
+  so the **uf-only control = the GRM-base RM** (identical 6000-UF recipe): UF **0.7255**, HH-OOD **0.483**.
+  The **mix** (3000 UF + 3000 Skywork): UF **0.7205**, Skywork-held **0.995**, HH-OOD **0.4855**. So mixing
+  Skywork makes a **broadly-competent** RM (UF held *and* Skywork nailed at 0.995) with no UF loss — but
+  **no HH-OOD lift** (0.4855 ≈ 0.483 ≈ chance; same floor effect as GRM). **Meta-lesson: HH-RLHF accuracy
+  is a poor yardstick for "better RM"** (everything UF-trained is at the floor); to really test "better RM
+  → better policy" you need the 1.5B-RM → PPO → judge chain or a non-saturated bench (RewardBench).
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
