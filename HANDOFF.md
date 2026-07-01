@@ -209,6 +209,13 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   PEAK (best balanced still v3 0.616); multi-head adds steerability at a small peak cost; gating overfits.
   These methods need larger scale + richer data.** Proper fix: prompt-only gating (thread the prompt boundary
   through collator→forward→score_texts) — real plumbing, uncertain payoff at 0.5B.
+- **Prompt-only gating (#15, the correct ArmoRM, 2026-07-01) — helped but still doesn't win at 0.5B.** Fixed
+  the shortcut: `gate_mask` threads through forward/head_and_pooled, `score_texts` builds a prompt-only mask,
+  `train_gating` caches PROMPT-pooled (via loss-mask) with ONE shared gate. Result vs full-seq gating: overall
+  0.573→**0.589**, refuse-harm 0.436→0.615 (less overfit — diagnosis confirmed), BUT still < fixed-weight MH
+  (0.611) & single-scalar v3 (0.610); balanced 0.499 (traded respond-benign 0.420 for refuse-harm). RB2 Factuality
+  0.336. **Even correct ArmoRM underperforms at 0.5B → supports the "needs scale + richer data" hypothesis. THE
+  1.5B RUN IS THE TEST.** Checkpoint `checkpoints/rm_mh3_gated2_local`.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
