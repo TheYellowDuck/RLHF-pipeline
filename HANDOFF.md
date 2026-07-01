@@ -173,6 +173,17 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   same answer-vs-refuse axis.** Caught the safety cost ONLY by measuring every touched axis. Next: rebalance
   (more PKU / down-weight honesty) to recover refuse-harm, or accept the multi-objective frontier. Infra
   (RB2 eval, honesty gen, probe) all committed + tested.
+- **Multi-objective (multi-head) RM (#13, 2026-07-01) — the principled frontier fix.** Since one scalar RM
+  can't hold the 4-way frontier via data mixing, built a **multi-head RM**: one specialist head per objective,
+  each trained ONLY on its data (per-pair `objective` index), combined at inference by tunable `head_weights`
+  → navigate the frontier WITHOUT retraining. Files: `value_head.py` (num_heads), `reward_model.py`
+  (num_heads + head_weights buffer + `set_head_weights` + save/load), `preference.py` (mix `@<obj>` suffix +
+  collator objective), `reward_trainer.py` (per-objective loss routing), config `train.num_heads`, eval
+  scripts `--head-weights`, `scripts/sweep_heads.py` (score-once → sweep weights → frontier). Backward compat:
+  old ckpts load as num_heads=1; 28 tests pass + smoke `multi_head_check` (each head learns only its objective).
+  **IN FLIGHT:** 0.5B 3-head RM (head0=helpful[UF+benign-scary], head1=safety[PKU], head2=honesty), then a
+  weight sweep over RewardBench to find a point good on ALL axes. Output `checkpoints/rm_mh3_local/`; logs
+  `/tmp/rm_mh3.log`, chain `/tmp/mh3_chain.log`. Restore point before this build: git tag `frontier-mapped-2026-07-01`.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
