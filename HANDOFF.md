@@ -195,6 +195,20 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   + decoupling, NOT a higher ceiling at this scale.** Improve peak later: MLP heads, joint+per-head loss, or
   internal per-head standardization (so `set_head_weights` == sweep weights; currently the sweep prints the
   raw-equivalent). `scripts/sweep_heads.py` navigates it; `--head-weights` deploys a point.
+- **ArmoRM gating (#14, 2026-07-01) — researched SOTA, honest NEGATIVE at this scale.** Built the recommended
+  fix ([ArmoRM, arXiv:2406.12845](https://arxiv.org/abs/2406.12845), #1 on RewardBench): a `GatingNetwork`
+  (MLP→softmax) for CONTEXT-dependent head weights + per-head standardization, trained stage-2 by freezing
+  heads + caching features + BT loss (`scripts/train_gating.py`; full impl, 28 tests, round-trips). RESULT:
+  gated RM **overall 0.573 / balanced 0.509 — WORSE than fixed-weight MH (0.611/0.596), single-scalar v3
+  (0.610/0.616), even uniform weights (0.527)**. Cause: **train-acc 0.915 but held-out 0.573 = overfit** — I
+  gated on the FULL-sequence pooled hidden (per-response, so chosen/rejected get different weights → the gate
+  games response features), whereas ArmoRM gates on the PROMPT only (response-independent). My score path
+  (prompt+response concatenated, no boundary) doesn't cleanly expose the prompt for inference gating. Plus
+  ArmoRM's gains are 8B + rich multi-attribute data; 0.5B BT pairs give thin gating signal. **OVERALL
+  multi-objective finding: at 0.5B, none of {fixed multi-head, ArmoRM gating} beat a curated single-scalar on
+  PEAK (best balanced still v3 0.616); multi-head adds steerability at a small peak cost; gating overfits.
+  These methods need larger scale + richer data.** Proper fix: prompt-only gating (thread the prompt boundary
+  through collator→forward→score_texts) — real plumbing, uncertain payoff at 0.5B.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
