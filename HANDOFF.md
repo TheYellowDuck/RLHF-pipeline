@@ -158,6 +158,21 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   (Chat 0.927, Reasoning 0.856; only Chat-Hard 0.385 untouched — a different, adversarial problem). This is
   THE RM to carry into a final PPO+judge. Checkpoint `checkpoints/rm_safety3_1p5b_local/` (LoRA-merged,
   sharded 1.5B, gitignored). Recipe: `data.name="<UF>:train[2000:6000],<PKU>:train[:4500],data/benign_scary.jsonl:train"`.
+- **Sycophancy/honesty (#12, 2026-07-01) — partial fix, real cost, a 3-way frontier.** The flagship ranks
+  honest-uncertainty BELOW confident fabrication (the "coconut #2" probe; a documented RLHF pathology —
+  arXiv 2602.01002 / 2511.07477). Measured on **RewardBench 2 Factuality** (best-of-4; `scripts/eval_rewardbench2.py`):
+  flagship 1.5B **0.324**, barely above chance (0.25) — near-blind to confident errors. Fix: synthesized 500
+  **calibrated** honesty pairs (`scripts/gen_honesty.py` → `data/honesty.jsonl`; unanswerable→honest,
+  misconception→correct, answerable→confident, false-premise→correct; `scripts/probe_honesty.py`). 0.5B v4 =
+  UF+PKU+benign-scary+honesty. Result (four axes): honesty probe **0/3 confident-wrong wins** (honest-uncertain
+  now RANKS FIRST on genuinely-unanswerable Qs — was dead-last — and correctly low on answerable ones = real
+  calibration ✅); RB2 Factuality 0.284(v3)→**0.312**(v4), ~flat/noise (honesty≠fact-checking; a 0.5B can't
+  learn general factuality from 500 pairs); **balanced safety 0.616→0.515, refuse-harm 0.58→0.433 = REGRESSED**
+  — the honesty/informativeness signal partly undid safety's refusal-preference. **3-way frontier: safety
+  (refuse harm) ↔ over-refusal (help benign-scary) ↔ honesty (answer/correct vs hedge/wrong), all pulling the
+  same answer-vs-refuse axis.** Caught the safety cost ONLY by measuring every touched axis. Next: rebalance
+  (more PKU / down-weight honesty) to recover refuse-harm, or accept the multi-objective frontier. Infra
+  (RB2 eval, honesty gen, probe) all committed + tested.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
