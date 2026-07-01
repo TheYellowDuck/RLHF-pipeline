@@ -185,6 +185,17 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   weight sweep over RewardBench to find a point good on ALL axes. Output `checkpoints/rm_mh3_local/`; logs
   `/tmp/rm_mh3.log`, chain `/tmp/mh3_chain.log`. Restore point before this build: git tag `frontier-mapped-2026-07-01`.
 
+  **RESULT (0.5B 3-head, honest mixed):** frontier is navigable by `--head-weights` (refuse-heavy 0.805 →
+  respond-heavy) from ONE model. Best-balanced weights `0.43,1.0,0.29`: refuse 0.745 / respond 0.496 /
+  balanced 0.596 / overall 0.611. **✅ Fixes the irrecoverable-cost problem**: single-scalar+honesty (v4)
+  lost refuse-harm to 0.433 permanently; the multi-head KEEPS the honesty head AND dials refuse-harm back to
+  0.745 — objectives decoupled. **❌ Doesn't raise the peak**: best balanced 0.596 < honesty-free single-scalar
+  v3's 0.616 (each head is a weaker specialist w/ less data; linear head-combine < jointly-trained scalar).
+  RB2 Factuality ~chance at all weights (honesty head +0.02, marginal). **Takeaway: multi-head RM = steerability
+  + decoupling, NOT a higher ceiling at this scale.** Improve peak later: MLP heads, joint+per-head loss, or
+  internal per-head standardization (so `set_head_weights` == sweep weights; currently the sweep prints the
+  raw-equivalent). `scripts/sweep_heads.py` navigates it; `--head-weights` deploys a point.
+
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
 lift; see the GRM bullet). No Kaggle runs active; no heartbeats. Local checkpoints: `kaggle_ppo_ckpt/`
