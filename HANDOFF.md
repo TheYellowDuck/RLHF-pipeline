@@ -142,11 +142,22 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   Lesson: over-refusal is fixed by data that DIRECTLY targets the failing axis (benign-scary→helpful), not
   by relabeling existing safety data. Residual: respond-benign 0.656 still < uf-only 0.712, and Chat-Hard
   (~0.39) untouched — a real frontier, but we moved along it favorably. Checkpoint
-  `checkpoints/rm_safety3_local/`. **IN FLIGHT (2026-06-30): the 1.5B version of this v3 recipe** (UF + PKU +
-  benign-scary, 1.5B LoRA, CPU ~6.4 h train + ~50 min eval). Output `checkpoints/rm_safety3_1p5b_local/`;
-  logs `/tmp/rm_safety3_1p5b.log` + `/tmp/rb_safety3_1p5b.log`. Tests whether benign-scary also fixes the
-  1.5B's worse over-refusal (should-respond was 0.636); expected flagship RM (1.5B Chat/Reasoning + balanced
-  safety). If resuming: check those logs/checkpoint.
+  `checkpoints/rm_safety3_local/`.
+- **1.5B v3-recipe = THE FLAGSHIP RM (#11, 2026-07-01), over-refusal FULLY fixed.** UF + re-curated PKU +
+  benign-scary at 1.5B (LoRA, CPU ~6.4 h). RewardBench:
+
+  | 1.5B RM | refuse-harm | respond-benign | balanced | overall |
+  |---|---|---|---|---|
+  | uf-only (0.8025) | 0.17 | 0.756 | 0.276 | 0.610 |
+  | v1 safety (always-safer) | 0.78 | 0.636 | 0.700 | 0.715 |
+  | **v3 (+benign-scary)** | 0.74 | **0.756** | **0.748** | **0.728** |
+
+  **respond-benign fully recovered 0.636→0.756** (= the pure-helpfulness baseline — over-refusal GONE, not
+  just reduced; at 0.5B it only reached 0.656) while **refuse-harm held 0.74** (refusals-dangerous 0.81,
+  offensive 0.91). **balanced 0.748 + overall 0.728 = best RM of the project by every honest measure**
+  (Chat 0.927, Reasoning 0.856; only Chat-Hard 0.385 untouched — a different, adversarial problem). This is
+  THE RM to carry into a final PPO+judge. Checkpoint `checkpoints/rm_safety3_1p5b_local/` (LoRA-merged,
+  sharded 1.5B, gitignored). Recipe: `data.name="<UF>:train[2000:6000],<PKU>:train[:4500],data/benign_scary.jsonl:train"`.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
