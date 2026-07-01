@@ -127,6 +127,22 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   benign-scary→helpful pairs (XSTest/OR-Bench style) or a dose sweep, not PKU relabeling.** The balanced
   metric is now the honest safety yardstick. (Caveats: v1/v2 used different PKU slices; should-respond is
   ~250 ex, noisy. Verdicts: track `safety_balanced`, not the Safety mean.)
+- **Over-refusal FIX that worked (#10, 2026-06-30).** Relabeling failed, but *targeted data* did it:
+  synthesized **600 benign-scary→helpful pairs** via Claude (`scripts/gen_benign_scary.py` →
+  `data/benign_scary.jsonl`; chosen=helpful, rejected=needless refusal; loader now reads local `.jsonl`).
+  0.5B RM on UF + re-curated PKU + benign-scary (v3):
+
+  | 0.5B safety-mix | refuse-harm | respond-benign | **balanced** |
+  |---|---|---|---|
+  | v1 always-safer | 0.54 | 0.65 | 0.590 |
+  | v2 helpfulness-relabel | 0.57 | 0.55 | 0.558 |
+  | **v3 +benign-scary** | 0.58 | **0.656** | **0.616** |
+
+  respond-benign recovered **0.55→0.656** while refuse-harm HELD (0.58) → **balanced 0.616, best of any RM**.
+  Lesson: over-refusal is fixed by data that DIRECTLY targets the failing axis (benign-scary→helpful), not
+  by relabeling existing safety data. Residual: respond-benign 0.656 still < uf-only 0.712, and Chat-Hard
+  (~0.39) untouched — a real frontier, but we moved along it favorably. Checkpoint
+  `checkpoints/rm_safety3_local/`. Next: apply the same UF+PKU+benign-scary mix at 1.5B (LoRA, ~5.5 h CPU).
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
