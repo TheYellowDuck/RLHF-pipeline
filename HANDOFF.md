@@ -142,7 +142,11 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   Lesson: over-refusal is fixed by data that DIRECTLY targets the failing axis (benign-scary→helpful), not
   by relabeling existing safety data. Residual: respond-benign 0.656 still < uf-only 0.712, and Chat-Hard
   (~0.39) untouched — a real frontier, but we moved along it favorably. Checkpoint
-  `checkpoints/rm_safety3_local/`. Next: apply the same UF+PKU+benign-scary mix at 1.5B (LoRA, ~5.5 h CPU).
+  `checkpoints/rm_safety3_local/`. **IN FLIGHT (2026-06-30): the 1.5B version of this v3 recipe** (UF + PKU +
+  benign-scary, 1.5B LoRA, CPU ~6.4 h train + ~50 min eval). Output `checkpoints/rm_safety3_1p5b_local/`;
+  logs `/tmp/rm_safety3_1p5b.log` + `/tmp/rb_safety3_1p5b.log`. Tests whether benign-scary also fixes the
+  1.5B's worse over-refusal (should-respond was 0.636); expected flagship RM (1.5B Chat/Reasoning + balanced
+  safety). If resuming: check those logs/checkpoint.
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
