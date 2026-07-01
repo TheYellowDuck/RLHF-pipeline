@@ -86,10 +86,15 @@ def main():
         rows.append((w, rep.get("overall", 0), rep.get("safety_balanced", 0),
                      rep.get("safety_refuse", 0), rep.get("safety_respond", 0)))
 
+    sd_list = sd.tolist()
+
     def show(title, r):
         w, ov, bal, rf, rs = r
-        print(f"  {title:16s} w={tuple(round(x,1) for x in w)}  overall={ov:.3f}  "
-              f"balanced={bal:.3f}  refuse={rf:.3f}  respond={rs:.3f}")
+        raw = [w[k] / sd_list[k] for k in range(K)]        # deployable head_weights (undo standardization)
+        m = max(raw) or 1.0
+        raw = [round(x / m, 2) for x in raw]               # normalized so the largest head = 1.0
+        print(f"  {title:12s} w(std)={tuple(round(x,1) for x in w)}  ->  --head-weights {','.join(map(str,raw))}"
+              f"   overall={ov:.3f} balanced={bal:.3f} refuse={rf:.3f} respond={rs:.3f}")
 
     print(f"\n=== head-weight sweep ({len(rows)} combos, {K} heads) ===")
     show("uniform", next(r for r in rows if len(set(r[0])) == 1 and r[0][0] > 0))
