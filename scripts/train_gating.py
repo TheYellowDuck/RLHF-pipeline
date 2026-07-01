@@ -92,6 +92,7 @@ def main():
 
     gating.eval()
     rm.save_pretrained(args.output, merge=False)
+    tok.save_pretrained(args.output)                    # eval scripts load the tokenizer from the ckpt dir
     log.info("saved gated + head-standardized RM -> %s", args.output)
 
 
