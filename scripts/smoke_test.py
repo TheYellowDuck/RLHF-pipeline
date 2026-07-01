@@ -155,6 +155,53 @@ def aux_lm_check(tok):
     print(f"  reload as trunk-only RM OK; eval accuracy {acc2:.2f}")
 
 
+def multi_head_check(tok):
+    """Multi-objective RM: two heads, each trained ONLY on its objective's pairs (via the per-pair
+    'objective' index). Each head must separate its own signal; save/load must keep num_heads + weights."""
+    banner("multi-head (multi-objective) RM check")
+    from datasets import Dataset
+    prompt = "\n\nHuman: Rate this.\n\nAssistant:"
+    n = 16
+    ds = Dataset.from_dict({
+        "prompt": [prompt] * (2 * n),
+        "chosen":   [" good"] * n + [" safe"] * n,      # obj 0: good>bad   |  obj 1: safe>unsafe
+        "rejected": [" bad"] * n + [" unsafe"] * n,
+        "objective": [0] * n + [1] * n,
+    })
+    rm = RewardModel.from_backbone(MODEL, dtype=torch.float32, num_heads=2)
+    cfg = Config(dict(output_dir=f"{OUT}/rm_mh", data=dict(max_length=32),
+                      train=dict(epochs=15, batch_size=8, grad_accum=1, lr=5e-3, weight_decay=0.0,
+                                 warmup_ratio=0.0, max_grad_norm=1.0, bf16=False, num_heads=2,
+                                 log_every=1000, eval_every=10000, save_every=10000)))
+    RewardTrainer(rm, tok, cfg, DEVICE).train(ds)
+    check_finite(rm, "multi-head RM")
+    rm.eval()
+
+    def heads(chosen, rejected):
+        ec = tok([prompt + chosen], return_tensors="pt", padding=True)
+        er = tok([prompt + rejected], return_tensors="pt", padding=True)
+        with torch.no_grad():
+            hc = rm(ec["input_ids"], ec["attention_mask"], return_heads=True)[0]      # [2]
+            hr = rm(er["input_ids"], er["attention_mask"], return_heads=True)[0]
+        return hc, hr
+
+    c0, r0 = heads(" good", " bad")        # objective 0
+    c1, r1 = heads(" safe", " unsafe")     # objective 1
+    assert c0[0] > r0[0], "head 0 did not learn its objective (good>bad)"
+    assert c1[1] > r1[1], "head 1 did not learn its objective (safe>unsafe)"
+    combined = rm(tok([prompt + " good"], return_tensors="pt", padding=True)["input_ids"],
+                  tok([prompt + " good"], return_tensors="pt", padding=True)["attention_mask"])
+    assert combined.shape == (1,), f"combined reward should be scalar per row, got {tuple(combined.shape)}"
+    print(f"  head0 good-bad {(c0[0]-r0[0]).item():+.2f}; head1 safe-unsafe {(c1[1]-r1[1]).item():+.2f}; "
+          f"combined scalar OK")
+
+    rm.set_head_weights([1.0, 0.0])
+    rm.save_pretrained(f"{OUT}/rm_mh_w", merge=False)
+    reloaded = RewardModel.from_pretrained(f"{OUT}/rm_mh_w", dtype=torch.float32)
+    assert reloaded.num_heads == 2 and reloaded.head_weights.tolist() == [1.0, 0.0]
+    print("  save/load OK; num_heads=2 + head_weights=[1,0] preserved")
+
+
 def main():
     set_seed(0)
     prompts, pref, sft = synthetic()
@@ -241,6 +288,7 @@ def main():
     learning_check(tok)
     ppo_learning_check(tok)
     aux_lm_check(tok)
+    multi_head_check(tok)
 
     # ---- bonus: accelerate path (single-process CPU) ---------------------
     banner("bonus: accelerate path (single-process)")

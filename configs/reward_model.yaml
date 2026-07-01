@@ -43,6 +43,10 @@ train:
   gradient_checkpointing: false   # trade compute for memory on large models
   margin: 0.0                # Bradley-Terry margin (Llama-2 style; helps on separable pairs)
   label_smoothing: 0.1       # soft labels — robust to HH-RLHF's ~25% noisy pairs
+  num_heads: 1               # multi-objective RM: >1 gives one specialist head per objective, keyed by the
+                             # data mix's '@<obj>' suffix (e.g. "UF@0,PKU@1,honesty@2"); each pair trains
+                             # only its head. Combine at inference via head_weights (tune to navigate the frontier).
+  head_weights: null         # per-head combine weights (null = uniform mean); RewardModel.set_head_weights() re-tunes
   aux_lm_coef: 0.0           # GRM auxiliary LM loss weight α (arXiv:2406.10216). Try 0.05; keeps the
                              # LM head able to decode good text -> regularizes the RM, +3-8 OOD. Memory:
                              # logits are [B,T,vocab]; on a T4 at 0.5B drop batch_size to 2 (grad_accum 8).

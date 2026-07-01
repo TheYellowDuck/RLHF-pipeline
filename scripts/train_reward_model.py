@@ -37,6 +37,8 @@ def main():
         cfg.model.name_or_path, dtype=dtype,
         use_lora=cfg.model.get("use_lora", False), lora_cfg=cfg.model.get("lora", {}),
         aux_lm=aux_lm,
+        num_heads=int(cfg.train.get("num_heads", 1)),        # multi-objective RM: heads keyed by data '@obj'
+        head_weights=cfg.train.get("head_weights"),
     )
 
     train_ds = load_preference_dataset(

@@ -75,6 +75,8 @@ class RewardTrainer:
         self.label_smoothing = float(cfg.train.get("label_smoothing", 0.0))
         # GRM auxiliary LM regularization (arXiv:2406.10216): total loss = L_BT + coef * L_LM.
         # Needs a model built with aux_lm=True (keeps the LM head); warn + disable if it isn't.
+        # Multi-objective RM: each pair's Bradley-Terry loss trains only its objective's head.
+        self.num_heads = int(getattr(self.model, "num_heads", 1))
         self.aux_lm_coef = float(cfg.train.get("aux_lm_coef", 0.0))
         if self.aux_lm_coef > 0 and not getattr(self.model, "aux_lm", False):
             self.log.warning("aux_lm_coef>0 but the reward model has no LM head (built with "
@@ -92,12 +94,18 @@ class RewardTrainer:
         )
 
     def _scores(self, batch, with_logits: bool = False):
+        heads = self.num_heads > 1
         if with_logits:
             c, c_logits = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"],
-                                     return_lm_logits=True)
+                                     return_lm_logits=True, return_heads=heads)
         else:
-            c, c_logits = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"]), None
-        r = self.model(batch["rejected_input_ids"], batch["rejected_attention_mask"])
+            c, c_logits = self.model(batch["chosen_input_ids"], batch["chosen_attention_mask"],
+                                     return_heads=heads), None
+        r = self.model(batch["rejected_input_ids"], batch["rejected_attention_mask"], return_heads=heads)
+        if heads:   # [B,K] -> pick each pair's objective head -> [B], so every head trains only on its data
+            obj = batch["objective"]
+            ar = torch.arange(c.size(0), device=c.device)
+            c, r = c[ar, obj], r[ar, obj]
         return c, r, c_logits
 
     def train(self, train_ds, eval_ds=None):

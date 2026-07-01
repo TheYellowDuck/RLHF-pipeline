@@ -206,8 +206,12 @@ def load_preference_dataset(
         spec = spec.strip()
         if not spec:
             continue
+        spec, _, obj_s = spec.partition("@")   # optional '@<int>' = objective/head index (multi-objective RM)
+        obj = int(obj_s) if obj_s.strip().lstrip("-").isdigit() else 0
         nm, _, sp = spec.partition(":")
-        parts.append(_load_normalized(nm.strip(), sp.strip() or split))
+        d = _load_normalized(nm.strip(), sp.strip() or split)
+        d = d.add_column("objective", [obj] * len(d))
+        parts.append(d)
     ds = parts[0] if len(parts) == 1 else concatenate_datasets(parts)
     if len(parts) > 1:
         _log.info("mixed %d preference sources -> %d pairs", len(parts), len(ds))
@@ -292,6 +296,8 @@ class PreferenceCollator:
             "chosen_attention_mask": c_attn,
             "rejected_input_ids": r_ids,
             "rejected_attention_mask": r_attn,
+            # objective/head index per pair (multi-objective RM); 0 when untagged
+            "objective": torch.tensor([ex.get("objective", 0) for ex in batch], dtype=torch.long),
         }
         if self.emit_loss_mask:
             # 1 over chosen-response tokens only (prompt + padding -> 0). The boundary is the

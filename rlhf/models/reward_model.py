@@ -28,16 +28,27 @@ def last_token_indices(attention_mask: torch.Tensor) -> torch.Tensor:
 
 
 class RewardModel(nn.Module):
-    def __init__(self, backbone: nn.Module, hidden_size: int, aux_lm: bool = False):
+    def __init__(self, backbone: nn.Module, hidden_size: int, aux_lm: bool = False,
+                 num_heads: int = 1, head_weights=None):
         super().__init__()
         self.backbone = backbone
-        self.value_head = ValueHead(hidden_size)
+        self.num_heads = num_heads
+        self.value_head = ValueHead(hidden_size, num_heads=num_heads)
         self.config = backbone.config
         # GRM mode (arXiv:2406.10216): backbone is an AutoModelForCausalLM whose LM head is
         # kept, so an auxiliary language-modeling loss can regularize the hidden states. The
         # reward is still the value head on the last token's hidden state — identical to the
         # trunk-only path, since hidden_states[-1] is the same post-final-norm representation.
         self.aux_lm = aux_lm
+        # Multi-objective: each head is a specialist (helpfulness/safety/honesty), trained only on
+        # its objective's pairs; the scalar reward is a weighted sum, tunable at inference to
+        # navigate the objective frontier WITHOUT retraining. Default = uniform average.
+        w = torch.ones(num_heads) / num_heads if head_weights is None else torch.tensor(head_weights, dtype=torch.float32)
+        self.register_buffer("head_weights", w)
+
+    def set_head_weights(self, weights):
+        """Re-weight how the specialist heads combine into a scalar (inference-time frontier control)."""
+        self.head_weights = torch.tensor(weights, dtype=torch.float32, device=self.head_weights.device)
 
     def forward(
         self,
@@ -45,6 +56,7 @@ class RewardModel(nn.Module):
         attention_mask: torch.Tensor,
         return_per_token: bool = False,
         return_lm_logits: bool = False,
+        return_heads: bool = False,
     ):
         if self.aux_lm:
             out = self.backbone(
@@ -57,9 +69,13 @@ class RewardModel(nn.Module):
                 input_ids=input_ids, attention_mask=attention_mask, return_dict=True
             )
             hidden = out.last_hidden_state                   # [B, T, H]
-        per_token = self.value_head(hidden.to(self.value_head.proj.weight.dtype))  # [B, T]
+        per_token = self.value_head(hidden.to(self.value_head.proj.weight.dtype))  # [B,T] or [B,T,K]
         idx = last_token_indices(attention_mask)             # [B]
-        rewards = per_token[torch.arange(per_token.size(0), device=per_token.device), idx]
+        picked = per_token[torch.arange(per_token.size(0), device=per_token.device), idx]  # [B] or [B,K]
+        if self.num_heads > 1 and not return_heads:          # combine specialists -> scalar reward
+            rewards = (picked * self.head_weights.to(picked.dtype)).sum(-1)   # [B]
+        else:
+            rewards = picked                                 # [B] (single head) or [B,K] (return_heads)
         if return_lm_logits:
             if not self.aux_lm:
                 raise ValueError("return_lm_logits requires a model built with aux_lm=True")
@@ -79,6 +95,8 @@ class RewardModel(nn.Module):
         use_lora: bool = False,
         lora_cfg=None,
         aux_lm: bool = False,
+        num_heads: int = 1,
+        head_weights=None,
     ) -> "RewardModel":
         # GRM keeps the LM head -> load the full causal LM; otherwise just the trunk.
         backbone = (load_causal_lm if aux_lm else load_base_model)(name_or_path, dtype=dtype)
@@ -86,7 +104,7 @@ class RewardModel(nn.Module):
         if use_lora:
             task = "CAUSAL_LM" if aux_lm else "FEATURE_EXTRACTION"
             backbone = apply_lora(backbone, lora_cfg or {}, task_type=task)
-        return cls(backbone, hidden_size, aux_lm=aux_lm)
+        return cls(backbone, hidden_size, aux_lm=aux_lm, num_heads=num_heads, head_weights=head_weights)
 
     def enable_gradient_checkpointing(self):
         if getattr(self.backbone, "config", None) is not None:
@@ -106,7 +124,9 @@ class RewardModel(nn.Module):
         backbone.save_pretrained(path)
         torch.save(self.value_head.state_dict(), os.path.join(path, _HEAD_NAME))
         with open(os.path.join(path, _CONFIG_NAME), "w") as f:
-            json.dump({"hidden_size": self.value_head.proj.in_features}, f)
+            json.dump({"hidden_size": self.value_head.proj.in_features,
+                       "num_heads": self.num_heads,
+                       "head_weights": self.head_weights.tolist()}, f)
 
     @classmethod
     def from_pretrained(
@@ -115,7 +135,8 @@ class RewardModel(nn.Module):
         backbone = load_base_model(path, dtype=dtype)
         with open(os.path.join(path, _CONFIG_NAME)) as f:
             cfg = json.load(f)
-        model = cls(backbone, cfg["hidden_size"])
+        model = cls(backbone, cfg["hidden_size"], num_heads=cfg.get("num_heads", 1),
+                    head_weights=cfg.get("head_weights"))    # old single-head checkpoints -> num_heads=1
         head_path = os.path.join(path, _HEAD_NAME)
         if os.path.exists(head_path):
             model.value_head.load_state_dict(torch.load(head_path, map_location="cpu"))

@@ -117,6 +117,28 @@ def test_normalize_pku_safety_aware_helpfulness_preserving():
     assert _normalize_pku(both_unsafe)["chosen"] == ""
 
 
+def test_value_head_multi_head_shape():
+    from rlhf.models.value_head import ValueHead
+    h = torch.randn(2, 5, 8)
+    assert ValueHead(8, num_heads=1)(h).shape == (2, 5)        # single head -> squeezed (backward compat)
+    assert ValueHead(8, num_heads=3)(h).shape == (2, 5, 3)     # multi-head keeps the head axis
+
+
+def test_preference_collator_emits_objective():
+    from rlhf.data.preference import PreferenceCollator
+
+    class _WSTok:
+        pad_token_id = 0
+        def __call__(self, text, add_special_tokens=False):
+            return {"input_ids": [i + 1 for i in range(len(text.split()))]}
+
+    out = PreferenceCollator(_WSTok())([
+        {"prompt": "a", "chosen": "b", "rejected": "c", "objective": 2},
+        {"prompt": "a", "chosen": "b", "rejected": "c"},        # untagged -> 0
+    ])
+    assert out["objective"].tolist() == [2, 0]
+
+
 def test_local_jsonl_preference_loading(tmp_path):
     import json
     from rlhf.data import load_preference_dataset

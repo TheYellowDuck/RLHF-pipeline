@@ -33,6 +33,7 @@ def main():
     p.add_argument("--batch-size", type=int, default=8)
     p.add_argument("--device", default="auto")
     p.add_argument("--dtype", default="auto")
+    p.add_argument("--head-weights", default=None, help="multi-head RM: comma-sep combine weights, e.g. 1,1,0.5")
     args = p.parse_args()
 
     from datasets import load_dataset
@@ -41,6 +42,9 @@ def main():
     dtype = resolve_dtype(args.dtype, device)
     tok = load_tokenizer(args.reward_model)
     rm = RewardModel.from_pretrained(args.reward_model, dtype=dtype).to(device).eval()
+    if args.head_weights:
+        rm.set_head_weights([float(x) for x in args.head_weights.split(",")])
+        log.info("head weights set to %s", rm.head_weights.tolist())
 
     ds = load_dataset(args.dataset, split=args.split)
     if args.max_samples:

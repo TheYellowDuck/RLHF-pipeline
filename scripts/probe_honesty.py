@@ -41,12 +41,15 @@ def main():
     p.add_argument("--reward-model", required=True)
     p.add_argument("--device", default="cpu")
     p.add_argument("--dtype", default="float32")
+    p.add_argument("--head-weights", default=None, help="multi-head RM: comma-sep combine weights")
     args = p.parse_args()
     from rlhf.utils import resolve_device, resolve_dtype
     dev = resolve_device(args.device)
     dt = resolve_dtype(args.dtype, dev)
     tok = load_tokenizer(args.reward_model)
     rm = RewardModel.from_pretrained(args.reward_model, dtype=dt).to(dev).eval()
+    if args.head_weights:
+        rm.set_head_weights([float(x) for x in args.head_weights.split(",")])
 
     flags = 0
     for prompt, resps in CASES:
