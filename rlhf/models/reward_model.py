@@ -85,16 +85,17 @@ class RewardModel(nn.Module):
         self.head_weights = torch.tensor(weights, dtype=torch.float32, device=self.head_weights.device)
 
     @torch.no_grad()
-    def head_and_pooled(self, input_ids, attention_mask):
+    def head_and_pooled(self, input_ids, attention_mask, gate_mask=None):
         """(per-head last-token scores [B,K], mean-pooled hidden [B,H]) — cached features for training the
-        gating network without re-running the backbone each step."""
+        gating network without re-running the backbone each step. ``gate_mask`` (e.g. prompt-only) selects
+        which tokens are pooled for the gate input; defaults to the full sequence."""
         out = self.backbone(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
         hidden = out.last_hidden_state.to(self.value_head.proj.weight.dtype)
         per_token = self.value_head(hidden)                       # [B,T,K]
         idx = last_token_indices(attention_mask)
         picked = per_token[torch.arange(per_token.size(0), device=per_token.device), idx]  # [B,K]
-        m = attention_mask.unsqueeze(-1).to(hidden.dtype)
-        pooled = (hidden * m).sum(1) / m.sum(1).clamp_min(1.0)    # [B,H]
+        gm = (gate_mask if gate_mask is not None else attention_mask).unsqueeze(-1).to(hidden.dtype)
+        pooled = (hidden * gm).sum(1) / gm.sum(1).clamp_min(1.0)  # [B,H]
         return picked, pooled
 
     def forward(
@@ -104,6 +105,7 @@ class RewardModel(nn.Module):
         return_per_token: bool = False,
         return_lm_logits: bool = False,
         return_heads: bool = False,
+        gate_mask: torch.Tensor = None,
     ):
         if self.aux_lm:
             out = self.backbone(
@@ -123,8 +125,11 @@ class RewardModel(nn.Module):
         if self.num_heads > 1 and not return_heads:          # combine specialist heads -> scalar reward
             picked_z = (picked - self.head_means.to(picked.dtype)) / self.head_stds.to(picked.dtype)
             if self.gating is not None:                      # ArmoRM: context-dependent weights
-                m = attention_mask.unsqueeze(-1).to(hidden.dtype)
-                pooled = (hidden * m).sum(1) / m.sum(1).clamp_min(1.0)        # [B,H] mean over real tokens
+                # gate on the PROMPT only (gate_mask) when given, else the full sequence — prompt-only gating
+                # is response-independent (same weights for chosen/rejected), which avoids the gate overfitting
+                # to response features. Prompt hidden states are identical across responses (causal, shared prefix).
+                gm = (gate_mask if gate_mask is not None else attention_mask).unsqueeze(-1).to(hidden.dtype)
+                pooled = (hidden * gm).sum(1) / gm.sum(1).clamp_min(1.0)      # [B,H] mean over gate tokens
                 rewards = (picked_z * self.gating(pooled)).sum(-1)           # [B]
             else:                                            # fixed global weights (on standardized heads)
                 rewards = (picked_z * self.head_weights.to(picked.dtype)).sum(-1)   # [B]

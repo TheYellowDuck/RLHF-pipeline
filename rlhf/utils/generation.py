@@ -37,12 +37,20 @@ def score_texts(reward_model, tokenizer, prompts, responses, device, max_length=
     """Reward-model score for each (prompt+response). Returns a 1-D tensor."""
     prev_side = tokenizer.padding_side
     tokenizer.padding_side = "right"  # RewardModel scores the last non-pad token
+    gated = getattr(reward_model, "gating", None) is not None   # ArmoRM: gate on the prompt only
     scores = []
     for i in range(0, len(prompts), batch_size):
-        texts = [p + r for p, r in zip(prompts[i: i + batch_size], responses[i: i + batch_size])]
-        enc = tokenizer(texts, return_tensors="pt", padding=True, truncation=True,
-                        max_length=max_length, add_special_tokens=False)
+        p_batch, r_batch = prompts[i: i + batch_size], responses[i: i + batch_size]
+        enc = tokenizer([p + r for p, r in zip(p_batch, r_batch)], return_tensors="pt", padding=True,
+                        truncation=True, max_length=max_length, add_special_tokens=False)
         enc = {k: v.to(device) for k, v in enc.items()}
-        scores.append(reward_model(enc["input_ids"], enc["attention_mask"]).float().cpu())
+        gate_mask = None
+        if gated:                                              # 1 over prompt tokens, 0 over response + pad
+            gm = torch.zeros_like(enc["attention_mask"])
+            for r, p in enumerate(p_batch):
+                pl = len(tokenizer(p, add_special_tokens=False)["input_ids"])
+                gm[r, :min(pl, int(enc["attention_mask"][r].sum()))] = 1
+            gate_mask = gm.to(device)
+        scores.append(reward_model(enc["input_ids"], enc["attention_mask"], gate_mask=gate_mask).float().cpu())
     tokenizer.padding_side = prev_side
     return torch.cat(scores) if scores else torch.zeros(0)

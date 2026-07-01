@@ -53,21 +53,22 @@ def main():
     K, H = rm.num_heads, rm.value_head.proj.in_features
 
     ds = load_preference_dataset(args.data, args.split, args.max_samples)
-    coll = PreferenceCollator(tok, max_length=args.max_length)
+    coll = PreferenceCollator(tok, max_length=args.max_length, emit_loss_mask=True)  # need the response mask
     loader = DataLoader(ds, batch_size=args.batch_size, collate_fn=coll)
 
-    log.info("caching per-head scores + pooled hidden for %d pairs (one backbone pass)...", len(ds))
-    ch_h, ch_p, rj_h, rj_p = [], [], [], []
+    log.info("caching per-head scores + PROMPT-pooled hidden for %d pairs (one backbone pass)...", len(ds))
+    ch_h, rj_h, pr_p = [], [], []
     for i, b in enumerate(loader):
-        c, cp = rm.head_and_pooled(b["chosen_input_ids"].to(device), b["chosen_attention_mask"].to(device))
-        r, rp = rm.head_and_pooled(b["rejected_input_ids"].to(device), b["rejected_attention_mask"].to(device))
-        ch_h.append(c.cpu()); ch_p.append(cp.cpu()); rj_h.append(r.cpu()); rj_p.append(rp.cpu())
+        c_am = b["chosen_attention_mask"].to(device)
+        prompt_mask = c_am * (1 - b["chosen_loss_mask"].to(device))     # prompt = attention AND NOT response
+        c, pp = rm.head_and_pooled(b["chosen_input_ids"].to(device), c_am, gate_mask=prompt_mask)
+        r, _ = rm.head_and_pooled(b["rejected_input_ids"].to(device), b["rejected_attention_mask"].to(device))
+        ch_h.append(c.cpu()); rj_h.append(r.cpu()); pr_p.append(pp.cpu())  # prompt rep shared by both sides
         if i % 50 == 0:
             log.info("  cached %d/%d batches", i, len(loader))
-    ch_h, ch_p = torch.cat(ch_h), torch.cat(ch_p)      # [N,K], [N,H]
-    rj_h, rj_p = torch.cat(rj_h), torch.cat(rj_p)
+    ch_h, rj_h, pr_p = torch.cat(ch_h), torch.cat(rj_h), torch.cat(pr_p)   # [N,K],[N,K],[N,H]
 
-    # per-head standardization (over pooled chosen+rejected scores) so the softmax gate is scale-fair
+    # per-head standardization (over chosen+rejected scores) so the softmax gate is scale-fair
     pool = torch.cat([ch_h, rj_h], 0)
     means, stds = pool.mean(0), pool.std(0).clamp_min(1e-6)
     rm.calibrate_heads(means.tolist(), stds.tolist())
@@ -76,14 +77,16 @@ def main():
     gating = rm.add_gating(temperature=args.temperature).to(torch.float32).train()
     opt = torch.optim.Adam(gating.parameters(), lr=args.lr)
     N = chz.size(0)
-    log.info("training gating (%d params) on %d cached pairs, %d epochs", sum(p.numel() for p in gating.parameters()), N, args.epochs)
+    log.info("training PROMPT-only gating (%d params) on %d cached pairs, %d epochs",
+             sum(p.numel() for p in gating.parameters()), N, args.epochs)
     for ep in range(args.epochs):
         perm = torch.randperm(N)
         tot, nb, acc = 0.0, 0, 0.0
         for s in range(0, N, args.gate_batch):
             idx = perm[s:s + args.gate_batch]
-            cc = (chz[idx] * gating(ch_p[idx].float())).sum(-1)      # [b] standardized-gated combined
-            rr = (rjz[idx] * gating(rj_p[idx].float())).sum(-1)
+            g = gating(pr_p[idx].float())                          # [b,K] SAME gate for both sides (prompt-only)
+            cc = (chz[idx] * g).sum(-1)
+            rr = (rjz[idx] * g).sum(-1)
             loss = -F.logsigmoid(cc - rr).mean()
             opt.zero_grad(); loss.backward(); opt.step()
             tot += loss.item(); nb += 1; acc += (cc > rr).float().mean().item()
