@@ -216,6 +216,18 @@ Remote: `TheYellowDuck/RLHF-pipeline` — **origin is in sync (all pushed).**
   (0.611) & single-scalar v3 (0.610); balanced 0.499 (traded respond-benign 0.420 for refuse-harm). RB2 Factuality
   0.336. **Even correct ArmoRM underperforms at 0.5B → supports the "needs scale + richer data" hypothesis. THE
   1.5B RUN IS THE TEST.** Checkpoint `checkpoints/rm_mh3_gated2_local`.
+- **1.5B multi-objective SCALE TEST (#16) — QUEUED for quota reset.** Notebook
+  `notebooks/kaggle_rm_multiobjective_1p5b.ipynb` runs the whole apparatus at 1.5B: 3-head RM (LoRA) +
+  prompt-only ArmoRM gating, then fixed-weight sweep + gated eval vs the single-scalar flagship (0.728 /
+  balanced 0.748) on RewardBench + RB2 Factuality. Tests the "needs scale" hypothesis. Kaggle GPU quota was
+  exhausted 2026-06-30; a watcher cron (`b28dd4af`, every 4 h) retries the T4 push and launches when quota's
+  back — but crons die with the session, so **MANUAL LAUNCH when quota resets** (weekly, ~2026-07-04+):
+  ```
+  python3 -c "import json;m=json.load(open('kernel-metadata.json'));m['id']='georgezhang06/rlhf-mo-1p5b';m['title']='RLHF MO 1p5b';m['code_file']='notebooks/kaggle_rm_multiobjective_1p5b.ipynb';m['dataset_sources']=[];json.dump(m,open('kernel-metadata.json','w'),indent=2)"
+  .venv/bin/kaggle kernels push -p . --accelerator NvidiaTeslaT4
+  ```
+  On COMPLETE: `kaggle kernels output georgezhang06/rlhf-mo-1p5b` → RESULTS.md; verdict = does multi-objective
+  (sweep or gated) beat the single-scalar 0.728/0.748 at 1.5B?
 
 **EARLIER ARC COMPLETE (2026-06-29) — #1–#4 done.** (A) PPO v2 `rlhf-ppo-1p5b` v2 — judge
 **57.25%** (= v1's 59.25% = the RM ceiling). (B) GRM A/B `rlhf-rm-grm` — **negative** (GRM ≈ base, no OOD
